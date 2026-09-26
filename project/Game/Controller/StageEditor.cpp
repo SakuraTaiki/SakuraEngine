@@ -51,6 +51,9 @@ const StageEditor::ItemDefinition kItems[] = {
     {26, "Checkpoint", StageEditor::Category::System, "Resources/Editor", "joint_box.obj", {0.25f,1,0.45f,1}, {0.25f,1.4f,0.25f}},
     {27, "Spike", StageEditor::Category::Gimmick, "Resources/Editor", "ico_sphere.obj", {0.95f,0.18f,0.18f,1}, {0.45f,0.45f,0.45f}},
     {28, "Falling Floor", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.82f,0.48f,0.18f,1}, {1.0f,0.3f,1.0f}},
+    {29, "Jump Pad", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.15f,0.9f,0.95f,1}, {0.9f,0.2f,1.0f}},
+    {30, "Conveyor Floor", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.95f,0.72f,0.12f,1}, {1.0f,0.22f,1.0f}},
+    {31, "Save Point", StageEditor::Category::System, "Resources/Editor", "joint_box.obj", {1.0f,0.72f,0.12f,1}, {0.35f,1.2f,0.35f}},
 };
 
 float DistanceSquared(const Vector3& a, const Vector3& b) {
@@ -159,6 +162,7 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     NewStage();
     RefreshStageFiles();
     LoadPlaylist();
+    RefreshSaveDataAvailability();
 #ifndef USE_IMGUI
     if (!campaignFiles_.empty()) {
         std::filesystem::path stagePath = campaignFiles_.front();
@@ -188,10 +192,11 @@ void StageEditor::Update(Input* input) {
     }
 
     constexpr float deltaTime = 1.0f / 60.0f;
-    if (mode_ == Mode::GamePlay) UpdateRuntimeObjects(deltaTime);
+    if (mode_ == Mode::GamePlay) UpdateGameFlow(input);
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) UpdateRuntimeObjects(deltaTime);
     for (auto& object:tileObjects_) if(object) object->Update();
     for (auto& object:objects_) if(object) object->Update();
-    if (mode_ == Mode::GamePlay) {
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) {
         UpdatePlayer(input);
     }
     if(cursorObject_ && mode_==Mode::Editor) {
@@ -228,7 +233,7 @@ void StageEditor::Draw3D() {
             (i >= placements_.size() || placements_[i].itemId == 25 || !IsRuntimePlacementActive(i))) continue;
         if (objects_[i]) objects_[i]->Draw();
     }
-    if(playerObject_ && mode_==Mode::GamePlay) playerObject_->Draw();
+    if(playerObject_ && mode_==Mode::GamePlay && gameFlowState_!=GameFlowState::Title) playerObject_->Draw();
     if(cursorObject_ && mode_==Mode::Editor) cursorObject_->Draw();
     if(cursorFrameObject_ && mode_==Mode::Editor) cursorFrameObject_->Draw();
 }
@@ -262,6 +267,7 @@ void StageEditor::Draw() {
             static_cast<int>(std::floor(playerPosition_.y / kTileWorldSize)),
             playerGrounded_ ? " (grounded)" : "");
         ImGui::Text("Stars: %d  Bubbles: %d  Keys: %d",collectedStars_,collectedBubbles_,keyCount_);
+        if(gameFlowState_==GameFlowState::Title) ImGui::TextColored({0.25f,0.75f,1.0f,1.0f},"TITLE: press Enter / gamepad A to start");
         if(goalReached_) ImGui::TextColored({0.2f,1.0f,0.35f,1.0f},"GOAL CLEAR!");
         ImGui::Text("Placed objects: %d",static_cast<int>(placements_.size()));
     }
@@ -323,6 +329,12 @@ void StageEditor::DrawSelectedItemSettings(){
     if(selectedItemId_==10&&ImGui::CollapsingHeader("Timed Block Settings",ImGuiTreeNodeFlags_DefaultOpen)){
         ImGui::SliderInt("Group ID",&selectedTimedGroupId_,1,9);ImGui::SliderInt("Order ID",&selectedTimedOrderId_,0,9);
     }
+    if(selectedItemId_==30&&ImGui::CollapsingHeader("Conveyor Settings",ImGuiTreeNodeFlags_DefaultOpen)){
+        if(ImGui::RadioButton("Move Left",selectedConveyorDirection_<0))selectedConveyorDirection_=-1;
+        ImGui::SameLine();
+        if(ImGui::RadioButton("Move Right",selectedConveyorDirection_>0))selectedConveyorDirection_=1;
+        ImGui::TextDisabled("Carries the player while standing on top.");
+    }
 #endif
 }
 
@@ -365,6 +377,30 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         draw->AddRectFilled({x+10,y+46},{x+250,y+72},IM_COL32(10,12,18,205),4);
         draw->AddText({x+18,y+52},IM_COL32(255,230,70,255),buffer);
         DrawGridOverlay(x, y, width, height);
+    } else if (gameFlowState_ == GameFlowState::Title) {
+        draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(5,10,22,225));
+        const char* title="STAGE MAKER ADVENTURE";
+        const ImVec2 titleSize=ImGui::CalcTextSize(title);
+        draw->AddText({x+(width-titleSize.x)*0.5f,y+height*0.28f},IM_COL32(80,220,255,255),title);
+        const char* start="ENTER / GAMEPAD A : NEW GAME";
+        const ImVec2 startSize=ImGui::CalcTextSize(start);
+        draw->AddText({x+(width-startSize.x)*0.5f,y+height*0.48f},IM_COL32_WHITE,start);
+        if(hasSaveData_){
+            const char* resume="C / GAMEPAD Y : CONTINUE FROM SAVE POINT";
+            const ImVec2 resumeSize=ImGui::CalcTextSize(resume);
+            draw->AddText({x+(width-resumeSize.x)*0.5f,y+height*0.55f},IM_COL32(255,220,80,255),resume);
+        }
+    } else if (gameFlowState_ == GameFlowState::Clear) {
+        draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(4,18,10,220));
+        const char* clear="STAGE CLEAR!";
+        const ImVec2 clearSize=ImGui::CalcTextSize(clear);
+        draw->AddText({x+(width-clearSize.x)*0.5f,y+height*0.32f},IM_COL32(90,255,120,255),clear);
+        const char* retry="ENTER / GAMEPAD A : RETRY";
+        const ImVec2 retrySize=ImGui::CalcTextSize(retry);
+        draw->AddText({x+(width-retrySize.x)*0.5f,y+height*0.50f},IM_COL32_WHITE,retry);
+        const char* back="T / GAMEPAD B : TITLE";
+        const ImVec2 backSize=ImGui::CalcTextSize(back);
+        draw->AddText({x+(width-backSize.x)*0.5f,y+height*0.57f},IM_COL32(190,205,225,255),back);
     } else if (runtimeMessageTimer_ > 0.0f && !runtimeMessage_.empty()) {
         const ImVec2 textSize = ImGui::CalcTextSize(runtimeMessage_.c_str());
         const ImVec2 textPosition{x + (width - textSize.x) * 0.5f, y + height * 0.18f};
@@ -541,10 +577,40 @@ void StageEditor::EraseTile(int gridX, int gridY) {
 void StageEditor::SetMode(Mode mode){
     if(mode_==mode)return;
     mode_=mode;
-    if (mode_ == Mode::GamePlay) ResetPlayer();
+    if (mode_ == Mode::GamePlay) { ResetPlayer(); gameFlowState_=GameFlowState::Title; RefreshSaveDataAvailability(); }
     status_=mode==Mode::Editor?"EditorMode enabled":"GamePlayMode enabled";
 }
 
+void StageEditor::UpdateGameFlow(Input* input) {
+    if (!input) return;
+    const bool accept = input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE) ||
+        input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+    const bool continueGame = input->TriggerKey(DIK_C) ||
+        input->TriggerGamepadButton(XINPUT_GAMEPAD_Y);
+    const bool returnToTitle = input->TriggerKey(DIK_T) || input->TriggerKey(DIK_ESCAPE) ||
+        input->TriggerGamepadButton(XINPUT_GAMEPAD_B);
+
+    if (gameFlowState_ == GameFlowState::Title) {
+        if (continueGame && hasSaveData_) {
+            ResetRuntimeState();
+            if (LoadSavedProgress()) gameFlowState_ = GameFlowState::Playing;
+        } else if (accept) {
+            ResetRuntimeState();
+            gameFlowState_ = GameFlowState::Playing;
+            ShowRuntimeMessage("START!", 1.0f);
+        }
+    } else if (gameFlowState_ == GameFlowState::Clear) {
+        if (returnToTitle) {
+            ResetRuntimeState();
+            gameFlowState_ = GameFlowState::Title;
+            RefreshSaveDataAvailability();
+        } else if (accept) {
+            ResetRuntimeState();
+            gameFlowState_ = GameFlowState::Playing;
+            ShowRuntimeMessage("RETRY!", 1.0f);
+        }
+    }
+}
 void StageEditor::ResetPlayer() {
     ResetRuntimeState();
 }
@@ -554,6 +620,7 @@ void StageEditor::ResetRuntimeState() {
     runtimeMessageTimer_ = 0.0f;
     doorCooldown_ = 0.0f;
     playerFlashTimer_ = 0.0f;
+    playerDamageCooldown_ = 0.0f;
     runtimeMessage_.clear();
     collectedStars_ = 0;
     collectedBubbles_ = 0;
@@ -587,7 +654,8 @@ void StageEditor::RespawnPlayer(bool damaged) {
     playerPosition_.z = 0.0f;
     playerVelocity_ = {};
     playerGrounded_ = false;
-    playerFlashTimer_ = damaged ? 0.45f : 0.0f;
+    playerFlashTimer_ = damaged ? 0.8f : 0.0f;
+    playerDamageCooldown_ = damaged ? 1.0f : 0.0f;
     if (damaged) ShowRuntimeMessage("DAMAGE!  RESPAWN", 1.2f);
     if (playerObject_) {
         playerObject_->SetPosition(playerPosition_);
@@ -602,6 +670,81 @@ void StageEditor::ShowRuntimeMessage(const std::string& message, float seconds) 
     runtimeMessageTimer_ = seconds;
 }
 
+bool StageEditor::SaveProgressAt(size_t placementIndex) {
+    if (placementIndex >= placements_.size() || currentFile_.empty()) return false;
+    namespace fs = std::filesystem;
+    std::error_code error;
+    fs::create_directories(fs::path(kProgressSavePath).parent_path(), error);
+    if (error) return false;
+
+    nlohmann::json root;
+    root["version"] = 1;
+    root["stage_file"] = fs::path(currentFile_).generic_string();
+    root["stage_name"] = stageName_;
+    root["save_point_id"] = placements_[placementIndex].id;
+    root["position"] = {playerRespawnPosition_.x, playerRespawnPosition_.y, playerRespawnPosition_.z};
+    root["stars"] = collectedStars_;
+    root["bubbles"] = collectedBubbles_;
+    root["keys"] = keyCount_;
+    root["inactive_placement_ids"] = nlohmann::json::array();
+    for (size_t i = 0; i < placements_.size() && i < runtimePlacementActive_.size(); ++i) {
+        if (runtimePlacementActive_[i] == 0) root["inactive_placement_ids"].push_back(placements_[i].id);
+    }
+
+    std::ofstream output(kProgressSavePath);
+    if (!output) return false;
+    output << std::setw(2) << root;
+    const bool saved = output.good();
+    output.close();
+    hasSaveData_ = saved;
+    return saved;
+}
+
+bool StageEditor::LoadSavedProgress() {
+    try {
+        std::ifstream input(kProgressSavePath);
+        if (!input) return false;
+        nlohmann::json root;
+        input >> root;
+        const std::string savedStage = root.value("stage_file", std::string{});
+        if (savedStage.empty() || !std::filesystem::exists(savedStage)) return false;
+        if (std::filesystem::path(currentFile_).lexically_normal() !=
+            std::filesystem::path(savedStage).lexically_normal()) {
+            if (!LoadStage(savedStage)) return false;
+        }
+
+        auto position = root.value("position", std::vector<float>{});
+        if (position.size() != 3) return false;
+        playerRespawnPosition_ = {position[0], position[1], 0.0f};
+        playerPosition_ = playerRespawnPosition_;
+        playerVelocity_ = {};
+        collectedStars_ = root.value("stars", 0);
+        collectedBubbles_ = root.value("bubbles", 0);
+        keyCount_ = root.value("keys", 0);
+
+        if (root.contains("inactive_placement_ids") && root["inactive_placement_ids"].is_array()) {
+            for (const auto& value : root["inactive_placement_ids"]) {
+                const uint32_t id = value.get<uint32_t>();
+                for (size_t i = 0; i < placements_.size(); ++i) {
+                    if (placements_[i].id == id && i < runtimePlacementActive_.size()) {
+                        runtimePlacementActive_[i] = 0;
+                        break;
+                    }
+                }
+            }
+        }
+        ShowRuntimeMessage("CONTINUE FROM SAVE POINT", 1.6f);
+        return true;
+    } catch (const std::exception&) {
+        hasSaveData_ = false;
+        return false;
+    }
+}
+
+void StageEditor::RefreshSaveDataAvailability() {
+    std::error_code error;
+    hasSaveData_ = std::filesystem::is_regular_file(kProgressSavePath, error) && !error;
+}
 bool StageEditor::IsRuntimePlacementActive(size_t index) const {
     return index >= runtimePlacementActive_.size() || runtimePlacementActive_[index] != 0;
 }
@@ -625,6 +768,7 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
     runtimeMessageTimer_ = (std::max)(0.0f, runtimeMessageTimer_ - deltaTime);
     doorCooldown_ = (std::max)(0.0f, doorCooldown_ - deltaTime);
     playerFlashTimer_ = (std::max)(0.0f, playerFlashTimer_ - deltaTime);
+    playerDamageCooldown_ = (std::max)(0.0f, playerDamageCooldown_ - deltaTime);
 
     if (runtimePlacementPositions_.size() != placements_.size()) ResetRuntimeState();
     UpdateEnemies(deltaTime);
@@ -868,7 +1012,7 @@ void StageEditor::ResolvePlacedSolidCollisions() {
     for (size_t i = 0; i < placements_.size(); ++i) {
         if (!IsRuntimePlacementActive(i)) continue;
         const int itemId = placements_[i].itemId;
-        if (itemId != 4 && itemId != 5 && itemId != 8 && itemId != 9 && itemId != 10 && itemId != 28) continue;
+        if (itemId != 4 && itemId != 5 && itemId != 8 && itemId != 9 && itemId != 10 && itemId != 28 && itemId != 30) continue;
         if (!IsPlayerOverlappingPlacement(i)) continue;
 
         const Vector3 position = GetRuntimePlacementPosition(i);
@@ -894,7 +1038,7 @@ void StageEditor::ResolvePlacedSolidCollisions() {
     }
 }
 
-void StageEditor::UpdateGimmickCollisions(Input* input, float) {
+void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
     const bool enterDoor = input &&
         (input->PushKey(DIK_W) || input->PushKey(DIK_UP) || input->GetLeftStickY() > 0.5f);
 
@@ -930,6 +1074,7 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float) {
             if (!goalReached_) {
                 goalReached_ = true;
                 playerVelocity_ = {};
+                gameFlowState_ = GameFlowState::Clear;
                 ShowRuntimeMessage("GOAL CLEAR!", 4.0f);
             }
             break;
@@ -985,8 +1130,38 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float) {
         case 23: // Enemy Flyer
         case 24: // Enemy Chaser
         case 27: // Spike
-            RespawnPlayer(true);
+            // Ignore hazards briefly after respawning. Without this guard an
+            // enemy overlapping the checkpoint could immediately damage the
+            // player again on every frame.
+            if (playerDamageCooldown_ <= 0.0f) RespawnPlayer(true);
             return;
+        case 29: { // Jump Pad
+            const Vector3 padPosition = GetRuntimePlacementPosition(i);
+            const float padHalfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.1f);
+            // Activate only while landing from above; side and underside
+            // contacts must not unexpectedly launch the player.
+            if (playerPosition_.y >= padPosition.y && playerVelocity_.y <= 0.0f) {
+                playerPosition_.y = padPosition.y + padHalfY + kPlayerHalfSize + 0.001f;
+                playerVelocity_.y = kPlayerJumpSpeed * 1.55f;
+                playerGrounded_ = false;
+                ShowRuntimeMessage("JUMP PAD!", 0.7f);
+            }
+            break;
+        }
+        case 30: { // Conveyor Floor
+            const Vector3 conveyorPosition = GetRuntimePlacementPosition(i);
+            const float conveyorHalfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.1f);
+            const float playerBottom = playerPosition_.y - kPlayerHalfSize;
+            const float conveyorTop = conveyorPosition.y + conveyorHalfY;
+            // Only carry a player standing on the upper face. Side contact must
+            // not pull the player through a wall or across the underside.
+            if (playerVelocity_.y <= 0.0f && std::abs(playerBottom - conveyorTop) <= 0.12f) {
+                const float direction = placements_[i].variant < 0 ? -1.0f : 1.0f;
+                MovePlayerHorizontal(direction * 3.0f * deltaTime);
+                if (!wasTouching) ShowRuntimeMessage(direction < 0.0f ? "CONVEYOR: LEFT" : "CONVEYOR: RIGHT", 0.8f);
+            }
+            break;
+        }
         case 26: // Checkpoint
             if (!wasTouching) {
                 playerRespawnPosition_ = GetRuntimePlacementPosition(i);
@@ -998,7 +1173,19 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float) {
                 ShowRuntimeMessage("CHECKPOINT!", 1.4f);
             }
             break;
-        default:
+        case 31: // Save Point
+            if (!wasTouching) {
+                playerRespawnPosition_ = GetRuntimePlacementPosition(i);
+                playerRespawnPosition_.y += 0.6f;
+                playerRespawnPosition_.z = 0.0f;
+                if (SaveProgressAt(i)) {
+                    if (i < objects_.size() && objects_[i]) objects_[i]->SetColor({1.0f,0.9f,0.2f,1.0f});
+                    ShowRuntimeMessage("GAME SAVED!", 1.5f);
+                } else {
+                    ShowRuntimeMessage("SAVE FAILED", 1.5f);
+                }
+            }
+            break;        default:
             break;
         }
     }
@@ -1089,6 +1276,7 @@ void StageEditor::PlaceItem(){
     if(item->id==18)p.variant=selectedDoorId_;
     else if(item->id==4||item->id==5||item->id==19)p.variant=selectedSwitchId_;
     else if(item->id==10)p.variant=selectedTimedGroupId_*10+selectedTimedOrderId_;
+    else if(item->id==30)p.variant=selectedConveyorDirection_;
     if(item->id==8)p.moveOffset=movingFloorOffset_;
     placements_.push_back(p); RebuildObjects(); status_="Placed stage object: "+std::string(item->name);
 }
@@ -1157,7 +1345,7 @@ void StageEditor::PushUndo(){undoStack_.push_back(MakeSnapshot());if(undoStack_.
 void StageEditor::Undo(){if(undoStack_.empty())return;redoStack_.push_back(MakeSnapshot());auto s=undoStack_.back();undoStack_.pop_back();tiles_=std::move(s.tiles);placements_=std::move(s.placements);nextPlacementId_=s.nextId;RebuildObjects();status_="Undo";}
 void StageEditor::Redo(){if(redoStack_.empty())return;undoStack_.push_back(MakeSnapshot());auto s=redoStack_.back();redoStack_.pop_back();tiles_=std::move(s.tiles);placements_=std::move(s.placements);nextPlacementId_=s.nextId;RebuildObjects();status_="Redo";}
 
-void StageEditor::NewStage(){placements_.clear();tiles_.assign(stageWidth_*stageHeight_,0);tileObjects_.clear();tileObjects_.resize(tiles_.size());objects_.clear();nextPlacementId_=1;undoStack_.clear();redoStack_.clear();currentFile_.clear();cursorPosition_=GridToWorld(0,2);cursorRotation_={};const auto* item=FindItem(selectedItemId_);cursorScale_=(item&&!IsTileItem(item->id))?item->defaultScale:Vector3{1,1,1};UpdateCursorObject();ResetPlayer();status_="New empty 16x16 tile stage";}
+void StageEditor::NewStage(){placements_.clear();tiles_.assign(stageWidth_*stageHeight_,0);tileObjects_.clear();tileObjects_.resize(tiles_.size());objects_.clear();nextPlacementId_=1;undoStack_.clear();redoStack_.clear();currentFile_.clear();stageName_="new_stage";cursorPosition_=GridToWorld(0,2);cursorRotation_={};const auto* item=FindItem(selectedItemId_);cursorScale_=(item&&!IsTileItem(item->id))?item->defaultScale:Vector3{1,1,1};UpdateCursorObject();ResetPlayer();status_="New empty 16x16 tile stage - enter a name before saving";}
 
 void StageEditor::DrawFilePanel(){
 #ifdef USE_IMGUI
@@ -1177,7 +1365,8 @@ void StageEditor::DrawFilePanel(){
     ImGui::TextDisabled("1 tile = 16 x 16 design pixels / %.1f world unit",kTileWorldSize);
     if(ImGui::Button("NEW EMPTY STAGE",{-1,28}))NewStage();
     char name[96]{};std::copy_n(stageName_.c_str(),(std::min)(stageName_.size(),sizeof(name)-1),name);
-    if(ImGui::InputText("Stage name",name,sizeof(name)))stageName_=name;
+    if(ImGui::InputText("Stage Display Name",name,sizeof(name)))stageName_=name;
+    ImGui::TextDisabled("File: %s.json",SanitizeFileName(stageName_).c_str());
     if(ImGui::Button("SAVE AS NEW FILE",{-1,34}))SaveAsNewStage();
     ImGui::TextDisabled("Existing files are never overwritten.");
     if(ImGui::Button("Refresh list"))RefreshStageFiles();
@@ -1214,7 +1403,7 @@ std::string StageEditor::MakeUniqueStagePath()const{namespace fs=std::filesystem
 bool StageEditor::SaveAsNewStage(){
 #ifdef USE_IMGUI
     namespace fs=std::filesystem;const std::string path=MakeUniqueStagePath();std::error_code ec;fs::create_directories(fs::path(path).parent_path(),ec);
-    nlohmann::json root;root["version"]=5;root["name"]=fs::path(path).stem().string();root["coordinate_system"]="tilemap_xy";root["tile_size"]=kTileSizePixels;root["tile_world_size"]=kTileWorldSize;root["size"]={stageWidth_,stageHeight_};
+    nlohmann::json root;root["version"]=5;root["name"]=stageName_;root["coordinate_system"]="tilemap_xy";root["tile_size"]=kTileSizePixels;root["tile_world_size"]=kTileWorldSize;root["size"]={stageWidth_,stageHeight_};
     root["tiles"]=nlohmann::json::array();
     for(int y=0;y<stageHeight_;++y){nlohmann::json row=nlohmann::json::array();for(int x=0;x<stageWidth_;++x)row.push_back(GetTileAt(x,y));root["tiles"].push_back(std::move(row));}
     root["objects"]=nlohmann::json::array();

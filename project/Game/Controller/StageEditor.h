@@ -19,6 +19,7 @@ public:
     static constexpr float kTileWorldSize = 1.0f;
 
     enum class Mode { Editor, GamePlay };
+    enum class GameFlowState { Title, Playing, Clear };
     enum class Category { Basic, Gimmick, Enemy, System };
     enum class TileCollisionType { Empty, Solid, OneWay, Ladder, SlopeUpRight, SlopeUpLeft };
 
@@ -104,6 +105,7 @@ private:
     void ResetRuntimeState();
     void RespawnPlayer(bool damaged = false);
     void UpdatePlayer(Input* input);
+    void UpdateGameFlow(Input* input);
     void UpdateRuntimeObjects(float deltaTime);
     void UpdateEnemies(float deltaTime);
     void UpdateGimmickCollisions(Input* input, float deltaTime);
@@ -112,6 +114,9 @@ private:
     bool IsRuntimePlacementActive(size_t index) const;
     Vector3 GetRuntimePlacementPosition(size_t index) const;
     void ShowRuntimeMessage(const std::string& message, float seconds = 1.5f);
+    bool SaveProgressAt(size_t placementIndex);
+    bool LoadSavedProgress();
+    void RefreshSaveDataAvailability();
     void MovePlayerHorizontal(float amount);
     void MovePlayerVertical(float amount);
     bool IsCollisionSolid(int gridX, int gridY) const;
@@ -187,6 +192,7 @@ private:
     std::vector<uint8_t> runtimeTileActive_;
     float runtimeTime_ = 0.0f;
     float playerFlashTimer_ = 0.0f;
+    float playerDamageCooldown_ = 0.0f;
     float runtimeMessageTimer_ = 0.0f;
     float doorCooldown_ = 0.0f;
     std::string runtimeMessage_;
@@ -196,6 +202,9 @@ private:
     bool pSwitchActive_ = false;
     bool onOffActive_ = true;
     bool goalReached_ = false;
+    GameFlowState gameFlowState_ = GameFlowState::Title;
+    bool hasSaveData_ = false;
+    static constexpr const char* kProgressSavePath = "SaveData/stage_progress.json";
 
     std::vector<Snapshot> undoStack_;
     std::vector<Snapshot> redoStack_;
@@ -216,6 +225,7 @@ private:
     int selectedSwitchId_ = 1;
     int selectedTimedGroupId_ = 1;
     int selectedTimedOrderId_ = 0;
+    int selectedConveyorDirection_ = 1;
     Vector3 movingFloorOffset_{0,3,0};
 
     std::string stageName_ = "stage_01";
