@@ -337,6 +337,7 @@ DirectXGame/imgui.ini
 # Local Codex build/inspection caches (not project assets)
 /.codex-work/
 /.pnpm-store/
+/tmp/
 
 # Runtime game progress (machine-local)
 /SaveData/
