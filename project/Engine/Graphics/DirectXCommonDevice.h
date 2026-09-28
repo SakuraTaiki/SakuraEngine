@@ -1,3 +1,10 @@
+// ============================================================================
+// ファイルの役割: DirectXCommonの責務を機能単位に分割し、初期化・描画・リソース操作を実装する。
+// 構成上の位置付け: 公開インターフェース、関連データ型、保持する状態を宣言する。
+// 実装時の注意: 所有権と初期化順序が分かるよう、実装変更時は対応する.cppとの整合性を保つ。
+// ============================================================================
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void DirectXCommon::InitializeDevice() {
 
 #ifdef _DEBUG
@@ -40,6 +47,8 @@ void DirectXCommon::InitializeDevice() {
 #endif
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void DirectXCommon::InitializeCommand() {
     D3D12_COMMAND_QUEUE_DESC queueDesc{};
     HRESULT hr = device_->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue_));
@@ -52,6 +61,8 @@ void DirectXCommon::InitializeCommand() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void DirectXCommon::InitializeSwapChain() {
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
     swapChainDesc.Width = width_;
@@ -72,6 +83,8 @@ void DirectXCommon::InitializeSwapChain() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void DirectXCommon::InitializeRenderTargetView() {
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
@@ -91,6 +104,8 @@ void DirectXCommon::InitializeRenderTargetView() {
     }
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void DirectXCommon::InitializeDepthStencilView() {
 
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
@@ -138,6 +153,8 @@ void DirectXCommon::InitializeDepthStencilView() {
 
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void DirectXCommon::InitializeFence() {
     HRESULT hr = device_->CreateFence(fenceValue_, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence_));
     assert(SUCCEEDED(hr));

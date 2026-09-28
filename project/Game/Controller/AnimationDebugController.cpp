@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: アニメーションの再生状態、骨表示、編集用UIを管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "AnimationDebugController.h"
 #include "AnimationLoader.h"
 #include "ModelManager.h"
@@ -104,6 +109,8 @@ void AnimationDebugController::Initialize(
     );
 }
 
+// 処理概要: 所有しているリソースと実行状態を安全に終了する。
+// 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void AnimationDebugController::Finalize() {
     animatedObject_.reset();
     skeletonDebugObjects_.clear();
@@ -442,6 +449,8 @@ void AnimationDebugController::UpdateAnimation()
 }
 
 
+// 処理概要: AnimationDebugControllerが担当する「SyncSkeletonToObject」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void AnimationDebugController::SyncSkeletonToObject() {
     if (!animatedObject_) {
         return;
@@ -679,6 +688,8 @@ void AnimationDebugController::StartAnimationTransition(
 
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void AnimationDebugController::UpdateSkeletonDebug() {
     if (skeletonDebugObjects_.size() != skeleton_.joints.size()) {
         return;
@@ -827,6 +838,8 @@ void AnimationDebugController::UpdateSkeletonDebug() {
     }
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void AnimationDebugController::Draw() {
     if (!showSkeletonDebug_) {
         if (animatedObject_) {
@@ -857,6 +870,8 @@ void AnimationDebugController::Draw() {
     }
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 int AnimationDebugController::GetJointCount() const {
     return static_cast<int>(skeleton_.joints.size());
 }
@@ -877,6 +892,8 @@ void AnimationDebugController::SetEnvironmentCoefficient(
     }
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void AnimationDebugController::DrawImGui() {
 #ifdef USE_IMGUI
     ImGui::Text("Mode");

@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: デバッグカメラの操作と通常カメラへの切り替えを管理する。
+// 構成上の位置付け: 公開インターフェース、関連データ型、保持する状態を宣言する。
+// 実装時の注意: 所有権と初期化順序が分かるよう、実装変更時は対応する.cppとの整合性を保つ。
+// ============================================================================
 #pragma once
 
 #include "MyMath.h"
@@ -7,7 +12,9 @@ class Input;
 
 class CameraDebugController {
 public:
-    void Update(Camera* camera, Input* input);
+    // allowMouseOperationがfalseの間は、カメラの回転・移動・ズーム入力を受け付けない。
+    // ただし補間中のズームとカメラ座標の反映は継続し、表示が不自然に停止しないようにする。
+    void Update(Camera* camera, Input* input, bool allowMouseOperation = true);
 
 private:
     void InitializeFromCamera(Camera* camera);

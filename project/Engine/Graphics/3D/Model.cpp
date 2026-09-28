@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: 3Dモデルの頂点・マテリアル・ノード・アニメーション関連データを保持する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Model.h"
 #include <fstream>
 #include <sstream>
@@ -10,12 +15,16 @@
 
 using namespace Microsoft::WRL;
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 Model* Model::CreateFromOBJ(DirectXCommon* dxCommon, const std::string& directoryPath, const std::string& filename, TextureManager* textureManager) {
     Model* model = new Model();
     model->Initialize(dxCommon, directoryPath, filename, textureManager);
     return model;
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Model::Initialize(DirectXCommon* dxCommon, const std::string& directoryPath, const std::string& filename, TextureManager* textureManager) {
     // 1. OBJ読み込み
     LoadObjFile(directoryPath, filename);
@@ -38,6 +47,8 @@ void Model::Initialize(DirectXCommon* dxCommon, const std::string& directoryPath
     }
 }
 
+// 処理概要: Modelが担当する「ReadNode」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 Node Model::ReadNode(aiNode* node) {
     Node result{};
 
@@ -278,6 +289,8 @@ void Model::LoadObjFile(const std::string& directoryPath,
     }
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Model::CreateBuffers(DirectXCommon* dxCommon) {
     auto device = dxCommon->GetDevice();
 
@@ -376,6 +389,8 @@ void Model::Draw(
     );
 }
 
+// 処理概要: Modelが担当する「StretchVertexX」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 bool Model::StretchVertexX(size_t vertexIndex, float amount) {
     if (vertexIndex >= vertices_.size() || !vertexBuffer_) {
         return false;

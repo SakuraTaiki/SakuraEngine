@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: ヒットエフェクトのプリセット、保存・読込、実行時再生を管理する。
+// 構成上の位置付け: 大きなクラスの実装を責務別に分割した内部ヘッダー。所有クラスの状態を前提に使用する。
+// 実装時の注意: 単独利用を想定せず、呼び出し順序と所有リソースの寿命を変更する場合は本体側も確認する。
+// ============================================================================
 void HitEffectController::Initialize(
     Primitive* primitive,
     Ring* ring,
@@ -34,6 +39,8 @@ std::string HitEffectController::MakeSafePresetName(
     return safeName;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void HitEffectController::UpdateActiveFlags() {
     if (primitive_) {
         primitive_->SetIsActive(enablePrimitive_);
@@ -48,6 +55,8 @@ void HitEffectController::UpdateActiveFlags() {
     }
 }
 
+// 処理概要: HitEffectControllerが担当する「Emit」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void HitEffectController::Emit(const Vector3& position) {
     const float effectSize =
         (std::max)(size_, 0.01f);
@@ -179,6 +188,8 @@ void HitEffectController::Emit(const Vector3& position) {
     emitComponents();
 }
 
+// 処理概要: 指定された設定や計算結果を現在の実行状態へ反映する。
+// 注意事項: 関連するキャッシュやGPU定数も必要に応じて更新する。
 void HitEffectController::ApplyFirePreset() {
     if (primitive_) {
         Primitive::Settings& settings =

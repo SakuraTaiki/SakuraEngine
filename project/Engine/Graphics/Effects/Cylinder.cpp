@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: 円柱形状または円柱パーティクルの頂点生成と描画を管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Cylinder.h"
 #include <cassert>
 #include <cmath>
@@ -9,6 +14,8 @@
 
 using namespace Microsoft::WRL;
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Cylinder::Initialize(DirectXCommon* dxCommon, TextureManager* textureManager) {
     assert(dxCommon);
     assert(textureManager);
@@ -42,6 +49,8 @@ void Cylinder::Initialize(DirectXCommon* dxCommon, TextureManager* textureManage
     instancingBufferView_.StrideInBytes = sizeof(InstanceData);
 }
 
+// 処理概要: Cylinderが担当する「Emit」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void Cylinder::Emit(const Vector3& position) {
     particleSystem_.Emit(position);
 }
@@ -122,6 +131,8 @@ void Cylinder::Update(
     }
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void Cylinder::Draw() {
     if (!isActive_) {
         return;
@@ -152,6 +163,8 @@ void Cylinder::Draw() {
     commandList->DrawInstanced(vertexCount_, count, 0, 0);
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Cylinder::CreateRootSignature() {
     D3D12_DESCRIPTOR_RANGE range = {};
     range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -201,6 +214,8 @@ void Cylinder::CreateRootSignature() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Cylinder::CreatePipelineState() {
     D3D12_INPUT_ELEMENT_DESC inputLayout[] = {
         { "POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0,
@@ -274,6 +289,8 @@ void Cylinder::CreatePipelineState() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Cylinder::CreateMesh() {
     const uint32_t kCylinderDivide = 32;
     const float kTopRadius = 1.0f;

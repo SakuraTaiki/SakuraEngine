@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: ゲームで利用する各コントローラーを組み立て、更新・描画順序を管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "GameScene.h"
 
 #include "ModelManager.h"
@@ -21,6 +26,8 @@
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
 #endif
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void GameScene::Initialize(EngineContext* context) {
     context_ = context;
 
@@ -110,6 +117,8 @@ void GameScene::Initialize(EngineContext* context) {
     );
 }
 
+// 処理概要: 所有しているリソースと実行状態を安全に終了する。
+// 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void GameScene::Finalize() {
     stageEditor_.Finalize();
     sceneObjects_.Finalize();
@@ -124,6 +133,8 @@ void GameScene::Finalize() {
     context_ = nullptr;
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void GameScene::InitializeModels() {
     ModelManager::Load("Resources/terrain", "terrain.obj");
     ModelManager::Load("axis.obj");
@@ -134,6 +145,8 @@ void GameScene::InitializeModels() {
 
 
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void GameScene::InitializeSprite() {
     uint32_t texHandle =
         context_->GetTextureManager()->LoadTexture("Resources/white.png");
@@ -143,6 +156,8 @@ void GameScene::InitializeSprite() {
 }
 
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void GameScene::InitializeRing() {
     ring_ = std::make_unique<Ring>();
     ring_->Initialize(context_->GetDxCommon(), context_->GetTextureManager());
@@ -169,6 +184,8 @@ void GameScene::InitializePrimitive()
 }
 
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void GameScene::Update() {
     Input* input = context_->GetInput();
 
@@ -192,9 +209,21 @@ void GameScene::Update() {
         UpdateSideScrollCamera();
     } else {
         sideScrollCameraActive_ = false;
+
+        // StageEditor編集中は、ゲームビュー上にマウスがある時だけ
+        // デバッグカメラへマウス入力を渡す。メニュー操作中の誤ズームを防ぐ。
+        bool allowDebugCameraMouseOperation = true;
+#ifdef USE_IMGUI
+        if (drawMode_ == GameSceneDrawMode::NormalObj &&
+            stageEditor_.IsEditingGameView()) {
+            allowDebugCameraMouseOperation = stageEditor_.IsGameViewHovered();
+        }
+#endif
+
         cameraDebug_.Update(
             context_->GetCamera(),
-            input
+            input,
+            allowDebugCameraMouseOperation
         );
     }
 
@@ -272,6 +301,8 @@ void GameScene::Update() {
     );
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void GameScene::UpdateSideScrollCamera() {
     Camera* camera = context_ ? context_->GetCamera() : nullptr;
     if (!camera) return;
@@ -316,6 +347,8 @@ void GameScene::UpdateSideScrollCamera() {
     camera->SetTranslate({sideScrollCameraX_, cameraY, cameraZ});
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void GameScene::UpdatePostEffectShortcuts() {
     Input* input = context_->GetInput();
     DirectXCommon* dxCommon = context_->GetDxCommon();
@@ -435,6 +468,8 @@ void GameScene::UpdatePostEffectShortcuts() {
     }
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void GameScene::InitializeTaskJsonHotReload() {
     constexpr const char* kTaskJsonPath = "Resources/Task.json";
     std::error_code error;
@@ -452,6 +487,8 @@ void GameScene::InitializeTaskJsonHotReload() {
     taskJsonReloadAttempts_ = 0;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void GameScene::UpdateTaskJsonHotReload() {
     constexpr const char* kTaskJsonPath = "Resources/Task.json";
     constexpr auto kReloadDebounce = std::chrono::milliseconds(250);
@@ -511,6 +548,8 @@ void GameScene::UpdateTaskJsonHotReload() {
     }
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void GameScene::UpdateObjects() {
     if (drawMode_ == GameSceneDrawMode::Effect) {
         sceneObjects_.Update();
@@ -523,11 +562,15 @@ void GameScene::UpdateObjects() {
 
 
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void GameScene::Draw() {
     Draw3D();
     Draw2D();
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void GameScene::Draw3D() {
     DirectXCommon* dxCommon = context_->GetDxCommon();
 

@@ -1,8 +1,15 @@
+// ============================================================================
+// ファイルの役割: 2DスプライトのTransform、UV、Material、頂点情報を更新・描画する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Sprite.h"
 #include "MyMath.h" // 必ずインクルード
 #include "D3DResourceHelper.h"
 #include <cassert>
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Sprite::Initialize(SpriteCommon* spriteCommon, uint32_t textureHandle) {
     assert(spriteCommon);
     spriteCommon_ = spriteCommon;
@@ -22,6 +29,8 @@ void Sprite::Initialize(SpriteCommon* spriteCommon, uint32_t textureHandle) {
     UpdateVertexData();
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void Sprite::Update() {
     // 頂点情報に変更があれば更新
     if (transferNeeded_) {
@@ -48,6 +57,8 @@ void Sprite::Update() {
     transformationMatrixData_->WVP = wvpMatrix;
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void Sprite::Draw() {
     // コマンドリスト取得
     // DirectXCommonに GetCommandList() を追加している前提
@@ -70,6 +81,8 @@ void Sprite::Draw() {
     commandList->DrawInstanced(6, 1, 0, 0);
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void Sprite::SetTextureRect(const Vector2& position, const Vector2& size) {
     textureLeftTop_ = position;
     textureSize_ = size;
@@ -77,6 +90,8 @@ void Sprite::SetTextureRect(const Vector2& position, const Vector2& size) {
     transferNeeded_ = true;
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void Sprite::SetTexture(uint32_t textureHandle) {
     textureHandle_ = textureHandle;
     auto& desc = spriteCommon_->GetTextureManager()->GetResourceDesc(textureHandle_);
@@ -84,6 +99,8 @@ void Sprite::SetTexture(uint32_t textureHandle) {
     transferNeeded_ = true;
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Sprite::CreateVertexBuffer() {
     auto device = spriteCommon_->GetDxCommon()->GetDevice();
 
@@ -102,6 +119,8 @@ void Sprite::CreateVertexBuffer() {
     vertexBufferView_.StrideInBytes = sizeof(VertexData);
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Sprite::CreateMaterialBuffer() {
     auto device = spriteCommon_->GetDxCommon()->GetDevice();
     size_t sizeIB =
@@ -123,6 +142,8 @@ void Sprite::CreateMaterialBuffer() {
     materialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Sprite::CreateTransformationMatrixBuffer() {
     auto device = spriteCommon_->GetDxCommon()->GetDevice();
     size_t sizeIB =
@@ -144,6 +165,8 @@ void Sprite::CreateTransformationMatrixBuffer() {
     transformationMatrixData_->WVP = Math::MakeIdentity4x4();
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void Sprite::UpdateVertexData() {
     VertexData* vertMap = nullptr;
     vertexBuffer_->Map(0, nullptr, (void**)&vertMap);

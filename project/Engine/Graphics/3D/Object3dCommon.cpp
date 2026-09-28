@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: 3Dオブジェクトで共有するパイプラインとカメラ参照を管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Object3dCommon.h"
 #include "Logger.h" // ログ用
 #include <cassert>
@@ -5,6 +10,8 @@
 
 using namespace Microsoft::WRL;
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Object3dCommon::Initialize(DirectXCommon* dxCommon) {
     assert(dxCommon);
     dxCommon_ = dxCommon;
@@ -41,6 +48,8 @@ void Object3dCommon::Initialize(DirectXCommon* dxCommon) {
     OutputDebugStringA("Object3dCommon::Initialize Finish\n");
 }
 
+// 処理概要: Object3dCommonが担当する「PreDraw」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void Object3dCommon::PreDraw() {
     auto commandList = dxCommon_->GetCommandList();
 
@@ -55,6 +64,8 @@ void Object3dCommon::PreDraw() {
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void Object3dCommon::SetDefaultLight() {
     if (lightData_) {
         lightData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -102,6 +113,8 @@ void Object3dCommon::SetDefaultLight() {
 
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Object3dCommon::CreateRootSignature() {
     OutputDebugStringA("CreateRootSignature Start\n");
 
@@ -241,6 +254,8 @@ void Object3dCommon::CreateRootSignature() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Object3dCommon::CreateGraphicsPipeline() {
     OutputDebugStringA("CreateGraphicsPipeline Start\n");
 
@@ -300,6 +315,8 @@ void Object3dCommon::CreateGraphicsPipeline() {
     }
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Object3dCommon::CreateSkinningComputePipeline() {
     D3D12_DESCRIPTOR_RANGE ranges[4]{};
     for (UINT index = 0; index < 4; ++index) {
@@ -379,6 +396,8 @@ void Object3dCommon::CreateSkinningComputePipeline() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Object3dCommon::CreateLightBuffer() {
     auto device = dxCommon_->GetDevice();
     D3D12_HEAP_PROPERTIES heapProps = { D3D12_HEAP_TYPE_UPLOAD, D3D12_CPU_PAGE_PROPERTY_UNKNOWN, D3D12_MEMORY_POOL_UNKNOWN, 1, 1 };

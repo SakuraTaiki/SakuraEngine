@@ -292,6 +292,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Engine\Input\Input.h" />
     <ClInclude Include="Engine\SceneSystem\AbstractSceneFactory.h" />
     <ClInclude Include="Engine\Utility\FpsLimiter.h" />
+    <ClInclude Include="Engine\Utility\Json.h" />
     <ClInclude Include="Engine\Utility\Logger.h" />
     <ClInclude Include="Engine\Utility\MyMath.h" />
     <ClInclude Include="Engine\Utility\StringUtility.h" />

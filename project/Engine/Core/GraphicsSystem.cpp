@@ -1,8 +1,15 @@
+// ============================================================================
+// ファイルの役割: DirectX 12描画基盤と描画関連マネージャーの初期化・終了を管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "GraphicsSystem.h"
 
 #include "EngineContext.h"
 #include "WinApp.h"
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void GraphicsSystem::Initialize(WinApp* winApp, EngineContext* context) {
     // DirectX 本体を最初に初期化する。
     dxCommon_ = std::make_unique<DirectXCommon>();
@@ -76,6 +83,8 @@ void GraphicsSystem::Initialize(WinApp* winApp, EngineContext* context) {
     context->SetImGuiManager(imGuiManager_.get());
 }
 
+// 処理概要: 所有しているリソースと実行状態を安全に終了する。
+// 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void GraphicsSystem::Finalize() {
     if (imGuiManager_) {
         imGuiManager_->Finalize();

@@ -1,3 +1,10 @@
+// ============================================================================
+// ファイルの役割: パーティクルの生成、更新、描画、GPUリソースを管理する。
+// 構成上の位置付け: 大きなクラスの実装を責務別に分割した内部ヘッダー。所有クラスの状態を前提に使用する。
+// 実装時の注意: 単独利用を想定せず、呼び出し順序と所有リソースの寿命を変更する場合は本体側も確認する。
+// ============================================================================
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void ParticleManager::CreateRootSignature() {
     D3D12_DESCRIPTOR_RANGE range = {};
     range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -32,6 +39,8 @@ void ParticleManager::CreateRootSignature() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void ParticleManager::CreatePipelineState() {
     
     D3D12_INPUT_ELEMENT_DESC inputLayout[] = {
@@ -74,6 +83,8 @@ void ParticleManager::CreatePipelineState() {
     }
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void ParticleManager::CreateMesh() {
     VertexData vertices[] = {
         {{-0.5f,  0.5f, 0, 1}, {0.0f, 0.0f}, {0, 0, -1}},

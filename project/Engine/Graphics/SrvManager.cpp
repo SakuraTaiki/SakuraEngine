@@ -1,7 +1,14 @@
+// ============================================================================
+// ファイルの役割: SRV・UAVディスクリプタヒープの確保とGPU/CPUハンドル管理を担当する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "SrvManager.h"
 #include "DirectXCommon.h"
 #include <cassert>
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 SrvManager* SrvManager::GetInstance() {
     static SrvManager instance;
     return &instance;
@@ -9,6 +16,8 @@ SrvManager* SrvManager::GetInstance() {
 
 const uint32_t SrvManager::kMaxSRVCount = 512;
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void SrvManager::Initialize(DirectXCommon* dxCommon) {
     assert(dxCommon);
     directXCommon_ = dxCommon;
@@ -31,6 +40,8 @@ void SrvManager::Initialize(DirectXCommon* dxCommon) {
 }
 
 
+// 処理概要: SrvManagerが担当する「Allocate」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 uint32_t SrvManager::Allocate() {
     if (!freeIndices_.empty()) {
         uint32_t index = freeIndices_.back();
@@ -47,12 +58,16 @@ uint32_t SrvManager::Allocate() {
 }
 
 
+// 処理概要: SrvManagerが担当する「Free」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void SrvManager::Free(uint32_t index) {
     assert(index < useIndex_);
     freeIndices_.push_back(index);
 }
 
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 uint32_t SrvManager::GetDescriptorIndex(D3D12_CPU_DESCRIPTOR_HANDLE handle) const {
     D3D12_CPU_DESCRIPTOR_HANDLE start =
         descriptorHeap_->GetCPUDescriptorHandleForHeapStart();
@@ -70,10 +85,14 @@ uint32_t SrvManager::GetDescriptorIndex(D3D12_CPU_DESCRIPTOR_HANDLE handle) cons
 }
 
 
+// 処理概要: 処理を続行できる条件やエラー状態を検査する。
+// 注意事項: 失敗条件を呼び出し側が判断できる形で返す。
 bool SrvManager::CheckCanAllocate() const {
     return useIndex_ < kMaxSRVCount;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 D3D12_CPU_DESCRIPTOR_HANDLE SrvManager::GetCPUDescriptorHandle(uint32_t index) {
     D3D12_CPU_DESCRIPTOR_HANDLE handle =
         descriptorHeap_->GetCPUDescriptorHandleForHeapStart();
@@ -82,6 +101,8 @@ D3D12_CPU_DESCRIPTOR_HANDLE SrvManager::GetCPUDescriptorHandle(uint32_t index) {
     return handle;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 D3D12_GPU_DESCRIPTOR_HANDLE SrvManager::GetGPUDescriptorHandle(uint32_t index) {
     D3D12_GPU_DESCRIPTOR_HANDLE handle =
         descriptorHeap_->GetGPUDescriptorHandleForHeapStart();
@@ -177,6 +198,8 @@ void SrvManager::CreateUAVForStructuredBuffer(
     );
 }
 
+// 処理概要: SrvManagerが担当する「PreDraw」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void SrvManager::PreDraw() {
     ID3D12DescriptorHeap* heaps[] = {
         descriptorHeap_.Get()
@@ -185,6 +208,8 @@ void SrvManager::PreDraw() {
     directXCommon_->GetCommandList()->SetDescriptorHeaps(1, heaps);
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void SrvManager::SetGraphicsRootDescriptorTable(UINT rootParameterIndex, uint32_t srvIndex) {
     directXCommon_->GetCommandList()->SetGraphicsRootDescriptorTable(
         rootParameterIndex,

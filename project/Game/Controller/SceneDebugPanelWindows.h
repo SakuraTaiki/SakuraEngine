@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: ゲームビューと各種デバッグ編集ウィンドウをImGui上へ構築する。
+// 構成上の位置付け: 大きなクラスの実装を責務別に分割した内部ヘッダー。所有クラスの状態を前提に使用する。
+// 実装時の注意: 単独利用を想定せず、呼び出し順序と所有リソースの寿命を変更する場合は本体側も確認する。
+// ============================================================================
 void SceneDebugPanel::Draw(
     EngineContext* context,
     GameSceneDrawMode& drawMode,
@@ -82,6 +87,8 @@ void SceneDebugPanel::Draw(
 #endif
 }
 
+// 処理概要: 指定された設定や計算結果を現在の実行状態へ反映する。
+// 注意事項: 関連するキャッシュやGPU定数も必要に応じて更新する。
 void SceneDebugPanel::ApplyWorkspace(Workspace workspace) {
     workspace_ = workspace;
     gameViewMaximized_ = false;
@@ -137,6 +144,8 @@ void SceneDebugPanel::ApplyWorkspace(Workspace workspace) {
     }
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 const char* SceneDebugPanel::GetWorkspaceName() const {
     switch (workspace_) {
     case Workspace::StageEditing: return "Stage Editing";
@@ -749,6 +758,8 @@ void SceneDebugPanel::DrawInspectorWindow(
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void SceneDebugPanel::DrawProjectWindow() {
 #ifdef USE_IMGUI
     ImGui::Begin("Project");
@@ -854,6 +865,8 @@ void SceneDebugPanel::DrawProjectWindow() {
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void SceneDebugPanel::DrawConsoleWindow() {
 #ifdef USE_IMGUI
     Detail::InitializeEditorConsoleOnce();

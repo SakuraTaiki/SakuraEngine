@@ -111,6 +111,7 @@
     <ClInclude Include="Engine\Audio\Sound.h" />
     <ClInclude Include="Engine\Camera\Camera.h" />
     <ClInclude Include="Engine\Utility\FpsLimiter.h" />
+    <ClInclude Include="Engine\Utility\Json.h" />
     <ClInclude Include="Engine\Utility\Logger.h" />
     <ClInclude Include="Engine\Utility\MyMath.h" />
     <ClInclude Include="Engine\Utility\StringUtility.h" />

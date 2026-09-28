@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: デバッグカメラの操作と通常カメラへの切り替えを管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "CameraDebugController.h"
 
 #include "Camera.h"
@@ -109,7 +114,8 @@ void CameraDebugController::CalculateCameraAxes(
 
 void CameraDebugController::Update(
     Camera* camera,
-    Input* input
+    Input* input,
+    bool allowMouseOperation
 ) {
     if (!camera || !input) {
         return;
@@ -135,7 +141,7 @@ void CameraDebugController::Update(
     const bool orbitWithRight =
         input->PushMouseButton(1);
 
-    if (orbitWithLeft || orbitWithRight) {
+    if (allowMouseOperation && (orbitWithLeft || orbitWithRight)) {
         yaw_ +=
             mouseDeltaX *
             rotateSensitivity_;
@@ -166,7 +172,7 @@ void CameraDebugController::Update(
     // 中ドラッグ
     // =========================================
 
-    if (input->PushMouseButton(2)) {
+    if (allowMouseOperation && input->PushMouseButton(2)) {
         // 遠いほど大きく移動する
         const float panSpeed =
             (std::max)(
@@ -199,8 +205,11 @@ void CameraDebugController::Update(
     // Smooth Zoom
     // =========================================
 
-    const float mouseWheel =
-        static_cast<float>(input->GetMouseWheelDelta()) / WHEEL_DELTA;
+    // StageEditorのメニュー上ではホイールをImGuiだけに渡し、
+    // ゲームビュー上にカーソルがある時だけステージをズームする。
+    const float mouseWheel = allowMouseOperation
+        ? static_cast<float>(input->GetMouseWheelDelta()) / WHEEL_DELTA
+        : 0.0f;
     if (mouseWheel != 0.0f) {
         // 距離に対して割合でズームする
         // 遠距離では大きく、近距離では細かく動く

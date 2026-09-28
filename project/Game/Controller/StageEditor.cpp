@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: 16×16タイル基準のステージ編集、保存・読込、ゲームプレイ実行を統括する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "StageEditor.h"
 
 #include "ModelManager.h"
@@ -13,7 +18,7 @@
 #include <fstream>
 #include <iomanip>
 #include <stdexcept>
-#include "externals/json/json.hpp"
+#include "Json.h"
 
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -71,6 +76,8 @@ Vector4 TransformPoint4(const Vector4& value, const Matrix4x4& matrix) {
 }
 }
 
+// 処理概要: StageEditorが担当する「GridToWorld」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 Vector3 StageEditor::GridToWorld(int gridX, int gridY, float z) {
     return {
         (static_cast<float>(gridX) + 0.5f) * kTileWorldSize,
@@ -79,6 +86,8 @@ Vector3 StageEditor::GridToWorld(int gridX, int gridY, float z) {
     };
 }
 
+// 処理概要: StageEditorが担当する「TileIndex」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 int StageEditor::TileIndex(int gridX, int gridY) const {
     if (gridX < 0 || gridY < 0 || gridX >= stageWidth_ || gridY >= stageHeight_) {
         return -1;
@@ -86,15 +95,21 @@ int StageEditor::TileIndex(int gridX, int gridY) const {
     return gridY * stageWidth_ + gridX;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 int StageEditor::GetTileAt(int gridX, int gridY) const {
     const int index = TileIndex(gridX, gridY);
     return index >= 0 && index < static_cast<int>(tiles_.size()) ? tiles_[index] : 0;
 }
 
+// 処理概要: 現在の状態が指定された条件を満たすか判定する。
+// 注意事項: 状態を変更せず、判定結果だけを返す。
 bool StageEditor::IsSolidTile(int gridX, int gridY) const {
     return GetTileCollisionType(gridX, gridY) == TileCollisionType::Solid;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 StageEditor::TileCollisionType StageEditor::GetTileCollisionType(int gridX, int gridY) const {
     // Keep collision semantics separate from the visual item ID. Future tiles
     // such as ladders, one-way platforms and slopes can be added here without
@@ -116,6 +131,8 @@ StageEditor::TileCollisionType StageEditor::GetTileCollisionType(int gridX, int 
     }
 }
 
+// 処理概要: 現在の状態が指定された条件を満たすか判定する。
+// 注意事項: 状態を変更せず、判定結果だけを返す。
 bool StageEditor::IsTileItem(int itemId) const {
     switch (itemId) {
     case 1:  // Ground
@@ -132,6 +149,8 @@ bool StageEditor::IsTileItem(int itemId) const {
     }
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture, float environmentCoefficient) {
     object3dCommon_=common;
     environmentTexture_=environmentTexture;
@@ -176,6 +195,8 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
 #endif
 }
 
+// 処理概要: 所有しているリソースと実行状態を安全に終了する。
+// 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void StageEditor::Finalize() {
     playerObject_.reset();
     cursorFrameObject_.reset();
@@ -186,6 +207,8 @@ void StageEditor::Finalize() {
     object3dCommon_=nullptr;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::Update(Input* input) {
     if (!active_) {
         return;
@@ -213,6 +236,8 @@ void StageEditor::Update(Input* input) {
     }
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::Draw3D() {
     if (!active_) {
         return;
@@ -238,6 +263,8 @@ void StageEditor::Draw3D() {
     if(cursorFrameObject_ && mode_==Mode::Editor) cursorFrameObject_->Draw();
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::Draw() {
 #ifdef USE_IMGUI
     if (!active_) {
@@ -276,6 +303,8 @@ void StageEditor::Draw() {
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawModeSwitcher() {
 #ifdef USE_IMGUI
     ImGui::TextUnformatted("MODE");
@@ -291,6 +320,8 @@ void StageEditor::DrawModeSwitcher() {
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawPalette() {
 #ifdef USE_IMGUI
     const char* categories[]={"Basic Blocks","Gimmicks & Interactables","Enemies","System"};
@@ -317,6 +348,8 @@ void StageEditor::DrawPalette() {
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawSelectedItemSettings(){
 #ifdef USE_IMGUI
     if(selectedItemId_==8&&ImGui::CollapsingHeader("Moving Floor Settings",ImGuiTreeNodeFlags_DefaultOpen))
@@ -338,6 +371,8 @@ void StageEditor::DrawSelectedItemSettings(){
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawTransformPanel() {
 #ifdef USE_IMGUI
     if(!ImGui::CollapsingHeader("16 x 16 Tile Placement",ImGuiTreeNodeFlags_DefaultOpen))return;
@@ -355,6 +390,8 @@ void StageEditor::DrawTransformPanel() {
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawGameView(float x,float y,float width,float height) {
 #ifdef USE_IMGUI
     if (!active_) {
@@ -363,6 +400,14 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
     }
 
     gameViewHovered_=ImGui::IsItemHovered();
+
+    // ゲームビュー画像の上で回したホイールは、この画像の操作として扱う。
+    // ImGuiに所有権を通知しておくことで、ステージをズームしたい時に
+    // 背後のStageEditorメニューまで同時に上下スクロールすることを防ぐ。
+    if (gameViewHovered_) {
+        ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
+    }
+
     HandleEditorInput(x, y, width, height);
     ImDrawList* draw=ImGui::GetWindowDrawList();
     const bool editing=mode_==Mode::Editor;
@@ -413,6 +458,8 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
 #endif
 }
 
+// 処理概要: StageEditorが担当する「HandleEditorInput」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::HandleEditorInput(float rectX, float rectY, float rectWidth, float rectHeight) {
 #ifdef USE_IMGUI
     ImGuiIO& io=ImGui::GetIO();
@@ -506,6 +553,8 @@ bool StageEditor::MouseToGrid(
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawGridOverlay(float rectX, float rectY, float rectWidth, float rectHeight) {
 #ifdef USE_IMGUI
     if (!showGrid_ || !object3dCommon_ || !object3dCommon_->GetDefaultCamera()) return;
@@ -544,6 +593,8 @@ void StageEditor::DrawGridOverlay(float rectX, float rectY, float rectWidth, flo
 #endif
 }
 
+// 処理概要: StageEditorが担当する「PaintTile」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::PaintTile(int gridX, int gridY) {
     const int index = TileIndex(gridX, gridY);
     if (index < 0 || !IsTileItem(selectedItemId_) || tiles_[index] == selectedItemId_) return;
@@ -561,6 +612,8 @@ void StageEditor::PaintTile(int gridX, int gridY) {
     status_ = "Painted 16x16 tile";
 }
 
+// 処理概要: StageEditorが担当する「EraseTile」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::EraseTile(int gridX, int gridY) {
     const int index = TileIndex(gridX, gridY);
     if (index >= 0 && tiles_[index] != 0) {
@@ -574,6 +627,8 @@ void StageEditor::EraseTile(int gridX, int gridY) {
     RemoveNearest();
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void StageEditor::SetMode(Mode mode){
     if(mode_==mode)return;
     mode_=mode;
@@ -581,6 +636,8 @@ void StageEditor::SetMode(Mode mode){
     status_=mode==Mode::Editor?"EditorMode enabled":"GamePlayMode enabled";
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdateGameFlow(Input* input) {
     if (!input) return;
     const bool accept = input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE) ||
@@ -611,10 +668,14 @@ void StageEditor::UpdateGameFlow(Input* input) {
         }
     }
 }
+// 処理概要: 担当する状態を再利用可能な初期値へ戻す。
+// 注意事項: リセット後も参照先とコンテナの整合性を保つ。
 void StageEditor::ResetPlayer() {
     ResetRuntimeState();
 }
 
+// 処理概要: 担当する状態を再利用可能な初期値へ戻す。
+// 注意事項: リセット後も参照先とコンテナの整合性を保つ。
 void StageEditor::ResetRuntimeState() {
     runtimeTime_ = 0.0f;
     runtimeMessageTimer_ = 0.0f;
@@ -649,6 +710,8 @@ void StageEditor::ResetRuntimeState() {
     RespawnPlayer(false);
 }
 
+// 処理概要: StageEditorが担当する「RespawnPlayer」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::RespawnPlayer(bool damaged) {
     playerPosition_ = playerRespawnPosition_;
     playerPosition_.z = 0.0f;
@@ -665,11 +728,15 @@ void StageEditor::RespawnPlayer(bool damaged) {
     }
 }
 
+// 処理概要: StageEditorが担当する「ShowRuntimeMessage」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::ShowRuntimeMessage(const std::string& message, float seconds) {
     runtimeMessage_ = message;
     runtimeMessageTimer_ = seconds;
 }
 
+// 処理概要: 現在の状態を再読込可能な形式で永続化する。
+// 注意事項: 保存先と書き込み結果を検証し、失敗を呼び出し側へ伝える。
 bool StageEditor::SaveProgressAt(size_t placementIndex) {
     if (placementIndex >= placements_.size() || currentFile_.empty()) return false;
     namespace fs = std::filesystem;
@@ -700,6 +767,8 @@ bool StageEditor::SaveProgressAt(size_t placementIndex) {
     return saved;
 }
 
+// 処理概要: 外部データを読み込み、実行時に扱える形式へ変換する。
+// 注意事項: 読込失敗時に既存の有効な状態を不必要に破壊しない。
 bool StageEditor::LoadSavedProgress() {
     try {
         std::ifstream input(kProgressSavePath);
@@ -709,6 +778,8 @@ bool StageEditor::LoadSavedProgress() {
         const std::string savedStage = root.value("stage_file", std::string{});
         if (savedStage.empty() || !std::filesystem::exists(savedStage)) return false;
         if (std::filesystem::path(currentFile_).lexically_normal() !=
+            // 処理概要: filesystemが担当する「path」処理を実行する。
+            // 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
             std::filesystem::path(savedStage).lexically_normal()) {
             if (!LoadStage(savedStage)) return false;
         }
@@ -741,18 +812,26 @@ bool StageEditor::LoadSavedProgress() {
     }
 }
 
+// 処理概要: StageEditorが担当する「RefreshSaveDataAvailability」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::RefreshSaveDataAvailability() {
     std::error_code error;
     hasSaveData_ = std::filesystem::is_regular_file(kProgressSavePath, error) && !error;
 }
+// 処理概要: 現在の状態が指定された条件を満たすか判定する。
+// 注意事項: 状態を変更せず、判定結果だけを返す。
 bool StageEditor::IsRuntimePlacementActive(size_t index) const {
     return index >= runtimePlacementActive_.size() || runtimePlacementActive_[index] != 0;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 Vector3 StageEditor::GetRuntimePlacementPosition(size_t index) const {
     return index < runtimePlacementPositions_.size() ? runtimePlacementPositions_[index] : placements_[index].position;
 }
 
+// 処理概要: 現在の状態が指定された条件を満たすか判定する。
+// 注意事項: 状態を変更せず、判定結果だけを返す。
 bool StageEditor::IsPlayerOverlappingPlacement(size_t index, float padding) const {
     if (index >= placements_.size() || !IsRuntimePlacementActive(index)) return false;
     const Placement& placement = placements_[index];
@@ -763,6 +842,8 @@ bool StageEditor::IsPlayerOverlappingPlacement(size_t index, float padding) cons
         std::abs(playerPosition_.y - position.y) < kPlayerHalfSize + halfY;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdateRuntimeObjects(float deltaTime) {
     runtimeTime_ += deltaTime;
     runtimeMessageTimer_ = (std::max)(0.0f, runtimeMessageTimer_ - deltaTime);
@@ -860,6 +941,8 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
     }
 }
 
+// 処理概要: 現在の状態が指定された条件を満たすか判定する。
+// 注意事項: 状態を変更せず、判定結果だけを返す。
 bool StageEditor::IsPlacementBlocked(const Vector3& position, float halfX, float halfY) const {
     constexpr float inset = 0.01f;
     const int minX = static_cast<int>(std::floor((position.x - halfX + inset) / kTileWorldSize));
@@ -874,6 +957,8 @@ bool StageEditor::IsPlacementBlocked(const Vector3& position, float halfX, float
     return false;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdateEnemies(float deltaTime) {
     if (goalReached_) return;
     if (runtimeEnemyDirections_.size() != placements_.size()) {
@@ -956,6 +1041,8 @@ void StageEditor::UpdateEnemies(float deltaTime) {
     }
 }
 
+// 処理概要: 現在の状態が指定された条件を満たすか判定する。
+// 注意事項: 状態を変更せず、判定結果だけを返す。
 bool StageEditor::IsCollisionSolid(int gridX, int gridY) const {
     // The left/right/bottom borders close the playable area. The top stays
     // open so tall jumps and later camera layouts are not artificially capped.
@@ -964,6 +1051,8 @@ bool StageEditor::IsCollisionSolid(int gridX, int gridY) const {
     return GetTileCollisionType(gridX, gridY) == TileCollisionType::Solid;
 }
 
+// 処理概要: StageEditorが担当する「MovePlayerHorizontal」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::MovePlayerHorizontal(float amount) {
     if (amount == 0.0f) return;
     constexpr float epsilon = 0.001f;
@@ -985,6 +1074,8 @@ void StageEditor::MovePlayerHorizontal(float amount) {
     playerPosition_.x = targetX;
 }
 
+// 処理概要: StageEditorが担当する「MovePlayerVertical」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::MovePlayerVertical(float amount) {
     if (amount == 0.0f) return;
     constexpr float epsilon = 0.001f;
@@ -1007,6 +1098,8 @@ void StageEditor::MovePlayerVertical(float amount) {
     playerPosition_.y = targetY;
 }
 
+// 処理概要: StageEditorが担当する「ResolvePlacedSolidCollisions」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::ResolvePlacedSolidCollisions() {
     constexpr float epsilon = 0.001f;
     for (size_t i = 0; i < placements_.size(); ++i) {
@@ -1038,6 +1131,8 @@ void StageEditor::ResolvePlacedSolidCollisions() {
     }
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
     const bool enterDoor = input &&
         (input->PushKey(DIK_W) || input->PushKey(DIK_UP) || input->GetLeftStickY() > 0.5f);
@@ -1191,6 +1286,8 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
     }
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdatePlayer(Input* input) {
     constexpr float deltaTime = 1.0f / 60.0f;
     float moveInput = 0.0f;
@@ -1259,6 +1356,8 @@ void StageEditor::UpdatePlayer(Input* input) {
 
 void StageEditor::ToggleMode(){SetMode(mode_==Mode::Editor?Mode::GamePlay:Mode::Editor);}
 
+// 処理概要: StageEditorが担当する「PlaceItem」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::PlaceItem(){
     const ItemDefinition* item=FindItem(selectedItemId_); if(!item)return;
     const int gridX = static_cast<int>(std::floor(cursorPosition_.x / kTileWorldSize));
@@ -1281,6 +1380,8 @@ void StageEditor::PlaceItem(){
     placements_.push_back(p); RebuildObjects(); status_="Placed stage object: "+std::string(item->name);
 }
 
+// 処理概要: 指定された要素を管理対象から取り除く。
+// 注意事項: 削除後に残る参照やインデックスを無効なまま残さない。
 void StageEditor::RemoveNearest(){
     const int gridX = static_cast<int>(std::floor(cursorPosition_.x / kTileWorldSize));
     const int gridY = static_cast<int>(std::floor(cursorPosition_.y / kTileWorldSize));
@@ -1292,6 +1393,8 @@ void StageEditor::RemoveNearest(){
     PushUndo(); placements_.erase(placements_.begin()+index); objects_.erase(objects_.begin()+index); status_="Removed nearest object";
 }
 
+// 処理概要: StageEditorが担当する「RotateCursor」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::RotateCursor(){
     if (IsTileItem(selectedItemId_)) { status_="Tiles do not require rotation"; return; }
     const int index=FindNearestPlacement(0.25f);
@@ -1299,6 +1402,8 @@ void StageEditor::RotateCursor(){
     cursorRotation_.y+=kPi*0.5f;if(cursorRotation_.y>=kPi*2)cursorRotation_.y-=kPi*2;UpdateCursorObject();
 }
 
+// 処理概要: 条件に一致するデータまたはリソースを検索する。
+// 注意事項: 見つからない場合を正常な結果として扱えるようにする。
 int StageEditor::FindNearestPlacement(float maxDistance) const {
     int result=-1; float best=maxDistance*maxDistance;
     for(int i=0;i<static_cast<int>(placements_.size());++i){const float d=DistanceSquared(cursorPosition_,placements_[i].position);if(d<best){best=d;result=i;}}
@@ -1307,6 +1412,8 @@ int StageEditor::FindNearestPlacement(float maxDistance) const {
 
 const StageEditor::ItemDefinition* StageEditor::FindItem(int id) const {for(const auto& item:kItems)if(item.id==id)return &item;return nullptr;}
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 std::unique_ptr<Object3d> StageEditor::CreateObject(const Placement& p) const {
     const ItemDefinition* item=FindItem(p.itemId); if(!item||!object3dCommon_)return nullptr;
     Model* model=ModelManager::Load(item->modelDirectory,item->modelFile);
@@ -1315,6 +1422,8 @@ std::unique_ptr<Object3d> StageEditor::CreateObject(const Placement& p) const {
     object->SetEnvironmentTexture(environmentTexture_); object->SetEnvironmentCoefficient(environmentCoefficient_); return object;
 }
 
+// 処理概要: StageEditorが担当する「RebuildObjects」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::RebuildObjects(){
     objects_.clear();
     objects_.reserve(placements_.size());
@@ -1334,6 +1443,8 @@ void StageEditor::RebuildObjects(){
     }
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdateCursorObject(){
     const ItemDefinition* item=FindItem(selectedItemId_); if(!item||!object3dCommon_)return;
     Placement p; p.itemId=selectedItemId_;p.position=cursorPosition_;p.rotation=cursorRotation_;p.scale=cursorScale_;
@@ -1347,6 +1458,8 @@ void StageEditor::Redo(){if(redoStack_.empty())return;undoStack_.push_back(MakeS
 
 void StageEditor::NewStage(){placements_.clear();tiles_.assign(stageWidth_*stageHeight_,0);tileObjects_.clear();tileObjects_.resize(tiles_.size());objects_.clear();nextPlacementId_=1;undoStack_.clear();redoStack_.clear();currentFile_.clear();stageName_="new_stage";cursorPosition_=GridToWorld(0,2);cursorRotation_={};const auto* item=FindItem(selectedItemId_);cursorScale_=(item&&!IsTileItem(item->id))?item->defaultScale:Vector3{1,1,1};UpdateCursorObject();ResetPlayer();status_="New empty 16x16 tile stage - enter a name before saving";}
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawFilePanel(){
 #ifdef USE_IMGUI
     if(!ImGui::CollapsingHeader("Stage Files",ImGuiTreeNodeFlags_DefaultOpen))return;
@@ -1368,7 +1481,52 @@ void StageEditor::DrawFilePanel(){
     if(ImGui::InputText("Stage Display Name",name,sizeof(name)))stageName_=name;
     ImGui::TextDisabled("File: %s.json",SanitizeFileName(stageName_).c_str());
     if(ImGui::Button("SAVE AS NEW FILE",{-1,34}))SaveAsNewStage();
-    ImGui::TextDisabled("Existing files are never overwritten.");
+
+    // currentFile_には、最後にロードまたは保存したステージのファイルパスが入る。
+    // 新規ステージ作成直後など、対象ファイルがまだ決まっていない状態では
+    // 間違ったファイルを上書きしないようにボタンを操作不能にする。
+    if(currentFile_.empty()){
+        ImGui::BeginDisabled();
+        ImGui::Button("OVERWRITE LOADED FILE",{-1,34});
+        ImGui::EndDisabled();
+        ImGui::TextDisabled("Load or save a stage before overwriting.");
+    }else{
+        // 実際に上書きされるファイル名を表示し、ユーザーが保存先を確認できるようにする。
+        const std::string loadedFileName=std::filesystem::path(currentFile_).filename().string();
+        ImGui::TextDisabled("Loaded file: %s",loadedFileName.c_str());
+
+        // ボタンを押しただけでは上書きせず、確認用のモーダルを開く。
+        // これにより、操作ミスによるステージデータの消失を防ぐ。
+        if(ImGui::Button("OVERWRITE LOADED FILE",{-1,34})){
+            ImGui::OpenPopup("Confirm Stage Overwrite");
+        }
+    }
+
+    // 上書きは元の内容を置き換える操作なので、実行前に必ず確認を取る。
+    if(ImGui::BeginPopupModal("Confirm Stage Overwrite",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+        ImGui::TextUnformatted("Overwrite this stage file with the current edits?");
+
+        // ポップアップを表示している間に保存対象が失われた場合も考慮し、
+        // currentFile_が空なら安全な代替文字列を表示する。
+        const std::string overwriteFileName=currentFile_.empty()
+            ? "(no file)"
+            : std::filesystem::path(currentFile_).filename().string();
+        ImGui::Text("%s",overwriteFileName.c_str());
+        ImGui::Spacing();
+
+        if(ImGui::Button("OVERWRITE",{150,32})){
+            // 確認後にだけ、現在ロードしているファイルへ保存する。
+            SaveCurrentStage();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if(ImGui::Button("Cancel",{100,32})){
+            // キャンセル時はファイルへ一切書き込まず、確認画面だけを閉じる。
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
     if(ImGui::Button("Refresh list"))RefreshStageFiles();
     std::string preview=selectedStageFile_>=0&&selectedStageFile_<static_cast<int>(stageFiles_.size())?std::filesystem::path(stageFiles_[selectedStageFile_]).filename().string():"Select stage...";
     if(ImGui::BeginCombo("Load",preview.c_str())){for(int i=0;i<static_cast<int>(stageFiles_.size());++i){std::string f=std::filesystem::path(stageFiles_[i]).filename().string();if(ImGui::Selectable(f.c_str(),selectedStageFile_==i))selectedStageFile_=i;}ImGui::EndCombo();}
@@ -1376,6 +1534,8 @@ void StageEditor::DrawFilePanel(){
 #endif
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void StageEditor::DrawPlaylistManager(){
 #ifdef USE_IMGUI
     if(!ImGui::CollapsingHeader("Playlist Manager",ImGuiTreeNodeFlags_DefaultOpen))return;
@@ -1400,20 +1560,109 @@ void StageEditor::DrawPlaylistManager(){
 std::string StageEditor::SanitizeFileName(const std::string& value){std::string r;for(unsigned char c:value)if(c>=0x80||std::isalnum(c)||c=='_'||c=='-'||c==' ')r.push_back(static_cast<char>(c));return r.empty()?"stage":r;}
 std::string StageEditor::MakeUniqueStagePath()const{namespace fs=std::filesystem;const fs::path dir="Resources/Stages";const std::string base=SanitizeFileName(stageName_);fs::path p=dir/(base+".json");for(int n=2;fs::exists(p);++n)p=dir/(base+"_"+std::to_string(n)+".json");return p.generic_string();}
 
+// 処理概要: 現在の状態を再読込可能な形式で永続化する。
+// 注意事項: 保存先と書き込み結果を検証し、失敗を呼び出し側へ伝える。
 bool StageEditor::SaveAsNewStage(){
 #ifdef USE_IMGUI
-    namespace fs=std::filesystem;const std::string path=MakeUniqueStagePath();std::error_code ec;fs::create_directories(fs::path(path).parent_path(),ec);
-    nlohmann::json root;root["version"]=5;root["name"]=stageName_;root["coordinate_system"]="tilemap_xy";root["tile_size"]=kTileSizePixels;root["tile_world_size"]=kTileWorldSize;root["size"]={stageWidth_,stageHeight_};
-    root["tiles"]=nlohmann::json::array();
-    for(int y=0;y<stageHeight_;++y){nlohmann::json row=nlohmann::json::array();for(int x=0;x<stageWidth_;++x)row.push_back(GetTileAt(x,y));root["tiles"].push_back(std::move(row));}
-    root["objects"]=nlohmann::json::array();
-    for(const auto& p:placements_)root["objects"].push_back({{"id",p.id},{"item_id",p.itemId},{"position",{p.position.x,p.position.y,p.position.z}},{"rotation",{p.rotation.x,p.rotation.y,p.rotation.z}},{"scale",{p.scale.x,p.scale.y,p.scale.z}},{"variant",p.variant},{"move_offset",{p.moveOffset.x,p.moveOffset.y,p.moveOffset.z}}});
-    std::ofstream out(path);if(!out){status_="Save failed";return false;}out<<std::setw(2)<<root;currentFile_=path;status_="Saved new stage: "+path;RefreshStageFiles();LoadPlaylist();return true;
+    // 新規保存では、既存ファイルと名前が重ならないパスを作成する。
+    // JSONの生成と書き込み自体は、上書き保存と同じ共通関数へ任せる。
+    return SaveStageToPath(MakeUniqueStagePath(),"Saved new stage: ");
 #else
     return false;
 #endif
 }
 
+// 処理概要: 現在の状態を再読込可能な形式で永続化する。
+// 注意事項: 保存先と書き込み結果を検証し、失敗を呼び出し側へ伝える。
+bool StageEditor::SaveCurrentStage(){
+#ifdef USE_IMGUI
+    // ロード済みのファイルがない場合、上書き先を判断できないため保存しない。
+    // UI側でもボタンを無効化しているが、関数側でも検査することで安全性を高める。
+    if(currentFile_.empty()){
+        status_="Overwrite failed: no stage file is loaded";
+        return false;
+    }
+
+    const std::filesystem::path currentPath=currentFile_;
+
+    // ステージデータ以外のファイルを誤って上書きしないよう、
+    // 拡張子が.jsonであり、実際に存在するファイルであることを確認する。
+    if(currentPath.extension()!=".json"||!std::filesystem::is_regular_file(currentPath)){
+        status_="Overwrite failed: loaded stage file was not found";
+        return false;
+    }
+
+    // LoadStage()で記録したcurrentFile_をそのまま保存先として使用する。
+    // これにより「ロード → 編集 → 同じファイルへ保存」という流れになる。
+    return SaveStageToPath(currentPath.generic_string(),"Overwrote stage: ");
+#else
+    return false;
+#endif
+}
+
+// 処理概要: 現在の状態を再読込可能な形式で永続化する。
+// 注意事項: 保存先と書き込み結果を検証し、失敗を呼び出し側へ伝える。
+bool StageEditor::SaveStageToPath(const std::string& path,const std::string& successMessage){
+#ifdef USE_IMGUI
+    namespace fs=std::filesystem;
+
+    // Resources/Stagesフォルダーが存在しない場合でも保存できるよう、
+    // 書き込み前に保存先の親フォルダーを作成する。
+    std::error_code directoryError;
+    fs::create_directories(fs::path(path).parent_path(),directoryError);
+    if(directoryError){
+        status_="Save failed: could not create stage directory";
+        return false;
+    }
+
+    // ここから先は、新規保存と上書き保存で共通となるJSON生成処理。
+    // ステージの基本設定、タイル、配置オブジェクトを1つのJSONへまとめる。
+    nlohmann::json root;root["version"]=5;root["name"]=stageName_;root["coordinate_system"]="tilemap_xy";root["tile_size"]=kTileSizePixels;root["tile_world_size"]=kTileWorldSize;root["size"]={stageWidth_,stageHeight_};
+
+    // タイルは二次元配列として保存する。
+    // y行ごとにx方向のタイルIDを並べることで、ロード時に同じ配置を復元できる。
+    root["tiles"]=nlohmann::json::array();
+    for(int y=0;y<stageHeight_;++y){nlohmann::json row=nlohmann::json::array();for(int x=0;x<stageWidth_;++x)row.push_back(GetTileAt(x,y));root["tiles"].push_back(std::move(row));}
+
+    // 敵やギミックなどの配置物は、固有IDとTransform、種類別の追加情報を保存する。
+    // variantにはコンベアの向きなど、move_offsetには移動床の移動量などが入る。
+    root["objects"]=nlohmann::json::array();
+    for(const auto& p:placements_)root["objects"].push_back({{"id",p.id},{"item_id",p.itemId},{"position",{p.position.x,p.position.y,p.position.z}},{"rotation",{p.rotation.x,p.rotation.y,p.rotation.z}},{"scale",{p.scale.x,p.scale.y,p.scale.z}},{"variant",p.variant},{"move_offset",{p.moveOffset.x,p.moveOffset.y,p.moveOffset.z}}});
+
+    // std::ios::truncを指定すると、既存ファイルの場合は古い内容を消してから書き直す。
+    // 新規ファイルの場合は、通常どおり新しいファイルが作成される。
+    std::ofstream out(path,std::ios::trunc);
+    if(!out){
+        status_="Save failed: could not open "+path;
+        return false;
+    }
+
+    // setw(2)でインデント付きJSONとして保存し、手作業でも内容を確認しやすくする。
+    out<<std::setw(2)<<root;
+    out.flush();
+
+    // ディスク容量不足などで書き込み途中に失敗した場合を検知する。
+    if(!out){
+        status_="Save failed while writing: "+path;
+        return false;
+    }
+
+    // 保存成功後は、このファイルを次回の上書き対象として記録する。
+    // 新規保存した直後でも、続けて同じファイルへ上書きできるようになる。
+    currentFile_=path;
+    status_=successMessage+path;
+
+    // ファイル一覧とプレイリスト候補を更新し、保存した内容をUIへ即時反映する。
+    RefreshStageFiles();
+    LoadPlaylist();
+    return true;
+#else
+    return false;
+#endif
+}
+
+// 処理概要: 外部データを読み込み、実行時に扱える形式へ変換する。
+// 注意事項: 読込失敗時に既存の有効な状態を不必要に破壊しない。
 bool StageEditor::LoadStage(const std::string& path){
     try{std::ifstream in(path);if(!in)throw std::runtime_error("file not found");nlohmann::json root;in>>root;std::vector<Placement> loaded;uint32_t maxId=0;
         auto size=root.value("size",std::vector<int>{200,15});if(size.size()>=2){stageWidth_=std::clamp(size[0],1,2000);stageHeight_=std::clamp(size[1],1,200);stageDepth_=1;}
@@ -1432,6 +1681,8 @@ bool StageEditor::LoadStage(const std::string& path){
 
 void StageEditor::RefreshStageFiles(){stageFiles_.clear();selectedStageFile_=-1;std::error_code ec;const std::filesystem::path dir="Resources/Stages";if(!std::filesystem::exists(dir,ec))return;for(const auto& e:std::filesystem::directory_iterator(dir,ec))if(e.is_regular_file()&&e.path().extension()==".json")stageFiles_.push_back(e.path().generic_string());std::sort(stageFiles_.begin(),stageFiles_.end());}
 
+// 処理概要: 外部データを読み込み、実行時に扱える形式へ変換する。
+// 注意事項: 読込失敗時に既存の有効な状態を不必要に破壊しない。
 void StageEditor::LoadPlaylist(){
     campaignFiles_.clear();availableFiles_.clear();std::ifstream in("Resources/Stages/sequence.txt");std::string line;while(std::getline(in,line))if(!line.empty())campaignFiles_.push_back(line);
     for(const auto& path:stageFiles_){const std::string name=std::filesystem::path(path).filename().string();if(std::find(campaignFiles_.begin(),campaignFiles_.end(),name)==campaignFiles_.end())availableFiles_.push_back(name);}

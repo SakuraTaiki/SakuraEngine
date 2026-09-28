@@ -1,8 +1,15 @@
+// ============================================================================
+// ファイルの役割: スプライト描画で共有するルートシグネチャとPSOを管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "SpriteCommon.h"
 #include <cassert>
 
 using Microsoft::WRL::ComPtr;
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void SpriteCommon::Initialize(DirectXCommon* dxCommon) {
     assert(dxCommon);
     dxCommon_ = dxCommon;
@@ -13,6 +20,8 @@ void SpriteCommon::Initialize(DirectXCommon* dxCommon) {
     CreateGraphicsPipeline();
 }
 
+// 処理概要: SpriteCommonが担当する「PreDraw」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void SpriteCommon::PreDraw() {
     assert(dxCommon_);
     auto commandList = dxCommon_->GetCommandList();
@@ -21,6 +30,8 @@ void SpriteCommon::PreDraw() {
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void SpriteCommon::CreateRootSignature() {
     HRESULT hr = S_FALSE;
 
@@ -80,6 +91,8 @@ void SpriteCommon::CreateRootSignature() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void SpriteCommon::CreateGraphicsPipeline() {
     auto device = dxCommon_->GetDevice();
     auto vsBlob = dxCommon_->CompileShader(L"Resources/shaders/hlsl/Sprite.VS.hlsl", L"vs_6_0");

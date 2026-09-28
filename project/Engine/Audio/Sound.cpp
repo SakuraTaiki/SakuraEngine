@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: 音声データの読み込み、再生、停止、音量制御を提供する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Sound.h"
 #include <cassert>
 #include <cstring>
@@ -6,6 +11,8 @@
 
 using namespace Microsoft::WRL;
 
+// 処理概要: 異なる座標系・文字コード・データ表現の間を変換する。
+// 注意事項: 変換元と変換先の規約を混在させない。
 std::wstring Sound::ConvertString(const std::string& str) {
     if (str.empty()) {
         return std::wstring();
@@ -26,6 +33,8 @@ std::wstring Sound::ConvertString(const std::string& str) {
     return result;
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Sound::Initialize() {
     HRESULT result;
 
@@ -42,6 +51,8 @@ void Sound::Initialize() {
     assert(SUCCEEDED(result));
 }
 
+// 処理概要: 所有しているリソースと実行状態を安全に終了する。
+// 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void Sound::Finalize() {
     // masterVoiceを破棄
     if (masterVoice) {
@@ -64,6 +75,8 @@ void Sound::Finalize() {
 }
 
 
+// 処理概要: Soundが担当する「SoundLoadFile」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 Sound::SoundData Sound::SoundLoadFile(const std::string& filename) {
     HRESULT result;
 
@@ -180,11 +193,15 @@ Sound::SoundData Sound::SoundLoadFile(const std::string& filename) {
     return soundData;
 }
 
+// 処理概要: Soundが担当する「SoundUnload」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void Sound::SoundUnload(SoundData* soundData) {
     soundData->buffer.clear();
     soundData->wfex = {};
 }
 
+// 処理概要: Soundが担当する「SoundPlay」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void Sound::SoundPlay(const SoundData& soundData, float volume) {
     HRESULT result;
 

@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: テクスチャの読み込み、GPU転送、SRV割り当て、再利用を管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "TextureManager.h"
 #include <vector>
 #include <cassert>
@@ -116,6 +121,8 @@ ComPtr<ID3D12Resource> UploadTextureData(
     return intermediateResource;
 }
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void TextureManager::Initialize(DirectXCommon* dxCommon,SrvManager*srvManager) {
     dxCommon_ = dxCommon;
     srvManager_ = srvManager;
@@ -124,6 +131,8 @@ void TextureManager::Initialize(DirectXCommon* dxCommon,SrvManager*srvManager) {
     assert(srvManager_);
 }
 
+// 処理概要: 外部データを読み込み、実行時に扱える形式へ変換する。
+// 注意事項: 読込失敗時に既存の有効な状態を不必要に破壊しない。
 uint32_t TextureManager::LoadTexture(const std::string& filePath) {
     if (fileMap_.contains(filePath)) {
         return fileMap_[filePath];
@@ -222,10 +231,14 @@ uint32_t TextureManager::LoadTexture(const std::string& filePath) {
 
     return index;
 }
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(uint32_t textureHandle) {
     return textures_[textureHandle].srvHandleGPU;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 const D3D12_RESOURCE_DESC& TextureManager::GetResourceDesc(uint32_t textureHandle) {
     return textures_[textureHandle].resourceDesc;
 }

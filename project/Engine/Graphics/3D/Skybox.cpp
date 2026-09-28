@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: キューブマップを使用した背景描画を管理する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Skybox.h"
 #include <cassert>
 #include "DirectXCommon.h"
@@ -8,6 +13,8 @@
 
 #pragma comment(lib, "d3dcompiler.lib")
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Skybox::Initialize(DirectXCommon* dxCommon, TextureManager* textureManager, const std::string& texturePath) {
     assert(dxCommon);
     assert(textureManager);
@@ -28,6 +35,8 @@ void Skybox::Initialize(DirectXCommon* dxCommon, TextureManager* textureManager,
     Update();
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Skybox::CreateRootSignature() {
     D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
     descriptionRootSignature.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
@@ -93,6 +102,8 @@ void Skybox::CreateRootSignature() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Skybox::CreateGraphicsPipeline() {
     auto vsBlob = dxCommon_->CompileShader(L"Resources/shaders/hlsl/Skybox.VS.hlsl", L"vs_6_0");
     auto psBlob = dxCommon_->CompileShader(L"Resources/shaders/hlsl/Skybox.PS.hlsl", L"ps_6_0");
@@ -135,6 +146,8 @@ void Skybox::CreateGraphicsPipeline() {
     assert(SUCCEEDED(hr));
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Skybox::CreateVertexBuffer() {
     VertexData vertices[] = {
         {{ 1.0f,  1.0f,  1.0f, 1.0f}}, {{ 1.0f,  1.0f, -1.0f, 1.0f}}, {{ 1.0f, -1.0f,  1.0f, 1.0f}},
@@ -174,6 +187,8 @@ void Skybox::CreateVertexBuffer() {
     vertexBufferView_.StrideInBytes = sizeof(VertexData);
 }
 
+// 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
+// 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 void Skybox::CreateConstantBuffers() {
     transformationResource_ =
         D3DResourceHelper::CreateUploadBuffer(
@@ -203,6 +218,8 @@ void Skybox::CreateConstantBuffers() {
     materialData_->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void Skybox::SetCamera(const Matrix4x4& view, const Matrix4x4& projection) {
     viewMatrix_ = view;
 
@@ -213,6 +230,8 @@ void Skybox::SetCamera(const Matrix4x4& view, const Matrix4x4& projection) {
     projectionMatrix_ = projection;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void Skybox::Update() {
     Matrix4x4 worldMatrix = Math::MakeAffineMatrix(
         transform_.scale,
@@ -225,6 +244,8 @@ void Skybox::Update() {
     transformationData_->WVP = wvpMatrix;
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void Skybox::Draw() {
     auto commandList = dxCommon_->GetCommandList();
 

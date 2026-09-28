@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: 16×16タイル基準のステージ編集、保存・読込、ゲームプレイ実行を統括する。
+// 構成上の位置付け: 公開インターフェース、関連データ型、保持する状態を宣言する。
+// 実装時の注意: 所有権と初期化順序が分かるよう、実装変更時は対応する.cppとの整合性を保つ。
+// ============================================================================
 #pragma once
 
 #include <cstdint>
@@ -52,6 +57,9 @@ public:
 
     bool IsEditingGameView() const { return mode_ == Mode::Editor; }
     bool IsGamePlayMode() const { return mode_ == Mode::GamePlay; }
+    // ゲームビュー上にマウスカーソルがある時だけ、カメラ操作を許可するために使用する。
+    // StageEditorのメニュー上でホイールを回した際、ステージまでズームする誤操作を防ぐ。
+    bool IsGameViewHovered() const { return gameViewHovered_; }
     bool IsActive() const { return active_; }
     void SetActive(bool active) {
         active_ = active;
@@ -142,6 +150,10 @@ private:
 
     void NewStage();
     bool SaveAsNewStage();
+    // 現在ロードしているステージファイルへ、編集内容を上書き保存する。
+    bool SaveCurrentStage();
+    // 新規保存と上書き保存で共通利用する、ステージJSONの書き込み処理。
+    bool SaveStageToPath(const std::string& path, const std::string& successMessage);
     bool LoadStage(const std::string& path);
     void RefreshStageFiles();
     void LoadPlaylist();

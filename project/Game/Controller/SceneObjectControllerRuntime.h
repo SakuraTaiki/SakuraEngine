@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: シーン配置オブジェクトの生成、更新、JSON保存・読込を管理する。
+// 構成上の位置付け: 大きなクラスの実装を責務別に分割した内部ヘッダー。所有クラスの状態を前提に使用する。
+// 実装時の注意: 単独利用を想定せず、呼び出し順序と所有リソースの寿命を変更する場合は本体側も確認する。
+// ============================================================================
 namespace {
     struct SceneControllerObb {
         Vector3 center{};
@@ -233,6 +238,8 @@ void SceneObjectController::Initialize(
     }
 }
 
+// 処理概要: 所有しているリソースと実行状態を安全に終了する。
+// 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void SceneObjectController::Finalize() {
     objects_.clear();
     objectNames_.clear();
@@ -246,6 +253,8 @@ void SceneObjectController::Finalize() {
     collisionPairs_.clear();
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void SceneObjectController::Update() {
     std::vector<uint8_t> updateState(objects_.size(), 0);
     std::function<void(size_t)> updateObject;
@@ -272,6 +281,8 @@ void SceneObjectController::Update() {
     UpdateBoxCollisions();
 }
 
+// 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
+// 注意事項: GPUリソースと描画パイプラインが初期化済みであることを前提とする。
 void SceneObjectController::Draw() {
     for (size_t index = 0; index < objects_.size(); ++index) {
         if (index == 0 && !showTerrain_) {

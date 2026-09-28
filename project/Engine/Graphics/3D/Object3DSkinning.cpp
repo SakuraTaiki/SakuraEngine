@@ -1,3 +1,8 @@
+// ============================================================================
+// ファイルの役割: スキニング済み3Dモデル専用の更新・描画処理を提供する。
+// 構成上の位置付け: ヘッダーで宣言した機能を実装し、外部公開する責務と内部処理を分離する。
+// 実装時の注意: GPU・ファイル・入力など外部状態を扱う処理では、初期化済みかと失敗時の戻り値を確認する。
+// ============================================================================
 #include "Object3dSkinning.h"
 
 #include "Object3dCommon.h"
@@ -5,6 +10,8 @@
 
 #include <cmath>
 
+// 処理概要: 利用する依存オブジェクトとGPU・ゲーム状態を初期化する。
+// 注意事項: 他の更新・描画処理より先に一度だけ呼び出す。
 void Object3dSkinning::Initialize(Object3dCommon* object3dCommon, Model* model) {
     object3dCommon_ = object3dCommon;
     model_ = model;
@@ -28,16 +35,22 @@ void Object3dSkinning::Initialize(Object3dCommon* object3dCommon, Model* model) 
     );
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void Object3dSkinning::SetSkeleton(const Skeleton& skeleton) {
     skeleton_ = skeleton;
 }
 
+// 処理概要: 外部から渡された値を、担当オブジェクトの状態へ反映する。
+// 注意事項: 必要に応じて範囲制限や依存データの再計算も行う。
 void Object3dSkinning::SetAnimation(const Animation& animation) {
     animation_ = animation;
     useAnimation_ = true;
     animationTime_ = 0.0f;
 }
 
+// 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
+// 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void Object3dSkinning::Update() {
     if (!model_ || !hasSkinCluster_) {
         return;
@@ -58,6 +71,8 @@ void Object3dSkinning::Update() {
     UpdateSkinCluster(skinCluster_, skeleton_);
 }
 
+// 処理概要: Object3dSkinningが担当する「DispatchComputeSkinning」処理を実行する。
+// 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void Object3dSkinning::DispatchComputeSkinning() {
     if (!object3dCommon_ || !hasSkinCluster_ ||
         skinCluster_.vertexCount == 0 ||
@@ -136,6 +151,8 @@ void Object3dSkinning::DispatchComputeSkinning() {
     skinCluster_.computeDispatchRequired = false;
 }
 
+// 処理概要: 外部から必要な状態またはリソース参照を取得する。
+// 注意事項: 返す参照やポインターの寿命は所有オブジェクトに従う。
 Matrix4x4 Object3dSkinning::GetRootLocalMatrix() const {
     if (!model_) {
         return Math::MakeIdentity4x4();
