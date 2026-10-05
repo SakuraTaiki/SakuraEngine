@@ -32,15 +32,15 @@ void GameScene::Initialize(EngineContext* context) {
     context_ = context;
 
 #ifndef USE_IMGUI
-    // The submitted Release build is evaluated on the animation feature.
-    // Start directly in the glTF animation view because no ImGui scene
-    // selector is available in that configuration.
-    drawMode_ = GameSceneDrawMode::Animation;
+    // Release版にはImGuiの表示切替がないため、ゲーム本編を直接起動する。
+    // これによりタイトルOBJを含む一連のゲームループがexeでも描画される。
+    drawMode_ = GameSceneDrawMode::NormalObj;
 #endif
 
     ModelManager::Initialize(context_->GetObject3dCommon());
 
     InitializeModels();
+    InitializeSkyDome();
     InitializeSprite();
 
     environment_.Initialize(
@@ -125,6 +125,8 @@ void GameScene::Finalize() {
 
     animationDebug_.Finalize();
     environment_.Finalize();
+    // ModelManagerを破棄する前に、モデルを参照している天球を解放する。
+    skyDome_.reset();
     sprite_.reset();
 
     soundController_.Finalize();
@@ -140,6 +142,30 @@ void GameScene::InitializeModels() {
     ModelManager::Load("axis.obj");
 
     ModelManager::Load("Resources/human", "walk.gltf");
+}
+
+// 処理概要: Prism Passage用の夕暮れ天球を生成し、背景として使用できる状態にする。
+// 注意事項: 天球はライティングの影響を受けず、PNG本来の色がそのまま表示される。
+void GameScene::InitializeSkyDome() {
+    Model* skyDomeModel = ModelManager::Load(
+        "Resources/SkyDome",
+        "prism_dusk_sphere.obj"
+    );
+
+    if (!skyDomeModel) {
+        OutputDebugStringA("Failed to load Prism Passage sky dome.\n");
+        return;
+    }
+
+    skyDome_ = std::make_unique<Object3d>();
+    skyDome_->Initialize(context_->GetObject3dCommon());
+    skyDome_->SetModel(skyDomeModel);
+
+    // CameraのfarClip(100)より内側に収め、ステージの十分後方に見える大きさにする。
+    skyDome_->SetScale({ 80.0f, 80.0f, 80.0f });
+    skyDome_->SetEnableLighting(false);
+    skyDome_->SetEnvironmentCoefficient(0.0f);
+    skyDome_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 }
 
 
@@ -245,6 +271,7 @@ void GameScene::Update() {
     }
 
     context_->GetCamera()->Update();
+    UpdateSkyDome();
 
     const Matrix4x4& view = context_->GetCamera()->GetViewMatrix();
     const Matrix4x4& projection = context_->GetCamera()->GetProjectionMatrix();
@@ -301,6 +328,17 @@ void GameScene::Update() {
     );
 }
 
+// 処理概要: カメラが横スクロールしても天球の中心から外れないよう毎フレーム追従させる。
+// 注意事項: カメラと同じ位置へ移動することで、背景に不要な視差や天球の端が発生しない。
+void GameScene::UpdateSkyDome() {
+    if (!skyDome_ || !context_ || !context_->GetCamera()) {
+        return;
+    }
+
+    skyDome_->SetPosition(context_->GetCamera()->GetTranslate());
+    skyDome_->Update();
+}
+
 // 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
 // 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void GameScene::UpdateSideScrollCamera() {
@@ -308,7 +346,10 @@ void GameScene::UpdateSideScrollCamera() {
     if (!camera) return;
 
     constexpr float deltaTime = 1.0f / 60.0f;
-    constexpr float cameraZ = -30.0f;
+    // ステージ最下段と落下開始部分まで画面内に収めるため、
+    // 従来の-30.0fより少し後方へカメラを引く。
+    // 引きすぎると自機やギミックが小さくなるため、視認性とのバランスを取り-36.0fとする。
+    constexpr float cameraZ = -36.0f;
     constexpr float cameraY = 7.0f;
     constexpr float followSmoothness = 10.0f;
 
@@ -321,6 +362,47 @@ void GameScene::UpdateSideScrollCamera() {
     const float minimumCameraX = halfViewWidth;
     const float maximumCameraX = (std::max)(minimumCameraX, stageWidth - halfViewWidth);
     const float playerX = stageEditor_.GetPlayerPosition().x;
+
+    // タイトルのフェード後は、スタート地点からゴールを見せて再びスタートへ戻る。
+    // smootherstepで加減速を滑らかにし、移動中だけ少しカメラを引いて
+    // ステージ全体を見渡せるシネマティックなカメラワークにする。
+    if (stageEditor_.IsIntroCameraActive()) {
+        const auto smootherStep=[](float value){
+            value=std::clamp(value,0.0f,1.0f);
+            return value*value*value*(value*(value*6.0f-15.0f)+10.0f);
+        };
+        const float progress=stageEditor_.GetIntroCameraProgress();
+        const float startX=std::clamp(stageEditor_.GetIntroCameraStartX(),minimumCameraX,maximumCameraX);
+        const float goalX=std::clamp(stageEditor_.GetIntroCameraGoalX(),minimumCameraX,maximumCameraX);
+
+        float cinematicX=startX;
+        float cinematicArc=0.0f;
+        if(progress<0.12f){
+            // 最初にスタート地点を短く見せ、プレイヤーの位置を把握させる。
+            cinematicX=startX;
+        }else if(progress<0.65f){
+            // メインのパン。中間では少し上昇・ズームアウトしてステージを広く見せる。
+            const float travel=(progress-0.12f)/(0.65f-0.12f);
+            const float eased=smootherStep(travel);
+            cinematicX=startX+(goalX-startX)*eased;
+            cinematicArc=std::sin(travel*3.14159265358979323846f);
+        }else if(progress<0.76f){
+            // ゴール地点を一呼吸映して、進む方向と目的を印象付ける。
+            cinematicX=goalX;
+        }else{
+            // 操作開始時にカメラが飛ばないよう、短く滑らかにスタートへ戻す。
+            const float returning=(progress-0.76f)/(1.0f-0.76f);
+            const float eased=smootherStep(returning);
+            cinematicX=goalX+(startX-goalX)*eased;
+            cinematicArc=0.55f*std::sin(returning*3.14159265358979323846f);
+        }
+
+        sideScrollCameraX_=cinematicX;
+        sideScrollCameraActive_=true;
+        camera->SetRotate({0.0f,0.0f,0.0f});
+        camera->SetTranslate({cinematicX,cameraY+cinematicArc*1.2f,cameraZ-cinematicArc*5.0f});
+        return;
+    }
 
     // Start at the left edge. Once the player crosses the screen center,
     // follow only to the right; clamping prevents showing outside the stage.
@@ -579,6 +661,11 @@ void GameScene::Draw3D() {
     context_->GetSrvManager()->PreDraw();
 
     context_->GetObject3dCommon()->PreDraw();
+
+    // 天球を最初に描画し、その後のステージ・キャラクターで手前を上書きする。
+    if (skyDome_) {
+        skyDome_->Draw();
+    }
 
     // The stage editor owns the editing viewport.  Do not mix the legacy
     // SceneObjectController scene (terrain/axis/Blender objects) into it:

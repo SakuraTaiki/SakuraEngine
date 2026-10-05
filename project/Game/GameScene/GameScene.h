@@ -43,6 +43,7 @@ public:
 private:
     // 初期化処理を役割ごとに分ける。
     void InitializeModels();
+    void InitializeSkyDome();
     void InitializeSprite();
     void InitializeRing();
     void InitializeCylinder();
@@ -55,6 +56,7 @@ private:
 
     // 更新処理。
     void UpdateObjects();
+    void UpdateSkyDome();
 
     // 描画処理。
     void Draw3D();
@@ -67,6 +69,8 @@ private:
     EngineContext* context_ = nullptr;
 
     std::unique_ptr<Sprite> sprite_;
+    // ステージ全体を包む天球。カメラに追従させ、背景としてのみ使用する。
+    std::unique_ptr<Object3d> skyDome_;
     std::unique_ptr<Ring> ring_;
     std::unique_ptr<Cylinder> cylinder_;
 
