@@ -335,6 +335,7 @@ DirectXGame/imgui.ini
 **/DirectXTex/Shaders/Compiled/
 
 # Local Codex build/inspection caches (not project assets)
+/.codex/
 /.codex-work/
 /.pnpm-store/
 /tmp/

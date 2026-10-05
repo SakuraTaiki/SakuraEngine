@@ -24,7 +24,7 @@ public:
     static constexpr float kTileWorldSize = 1.0f;
 
     enum class Mode { Editor, GamePlay };
-    enum class GameFlowState { Title, Playing, Clear };
+    enum class GameFlowState { Title, IntroCamera, Countdown, Playing, Clear };
     enum class Category { Basic, Gimmick, Enemy, System };
     enum class TileCollisionType { Empty, Solid, OneWay, Ladder, SlopeUpRight, SlopeUpLeft };
 
@@ -72,6 +72,11 @@ public:
     int GetStageWidthInTiles() const { return stageWidth_; }
     int GetStageHeightInTiles() const { return stageHeight_; }
     const Vector3& GetPlayerPosition() const { return playerPosition_; }
+    // タイトル後のステージ紹介カメラで使用する状態と注目位置。
+    bool IsIntroCameraActive() const { return gameFlowState_ == GameFlowState::IntroCamera; }
+    float GetIntroCameraProgress() const;
+    float GetIntroCameraStartX() const;
+    float GetIntroCameraGoalX() const;
     int GetTileAt(int gridX, int gridY) const;
     bool IsSolidTile(int gridX, int gridY) const;
     TileCollisionType GetTileCollisionType(int gridX, int gridY) const;
@@ -155,6 +160,8 @@ private:
     // 新規保存と上書き保存で共通利用する、ステージJSONの書き込み処理。
     bool SaveStageToPath(const std::string& path, const std::string& successMessage);
     bool LoadStage(const std::string& path);
+    // 指定したステージJSONを安全性を確認したうえで削除する。
+    bool DeleteStageFile(const std::string& path);
     void RefreshStageFiles();
     void LoadPlaylist();
     void SavePlaylist();
@@ -184,6 +191,8 @@ private:
     std::unique_ptr<Object3d> cursorObject_;
     std::unique_ptr<Object3d> cursorFrameObject_;
     std::unique_ptr<Object3d> playerObject_;
+    // タイトル状態の間だけ表示する「PRISM PASSAGE」の3Dブロック文字。
+    std::unique_ptr<Object3d> titleObject_;
 
     Vector3 playerPosition_{1.5f, 2.5f, 0.0f};
     Vector3 playerVelocity_{};
@@ -191,6 +200,9 @@ private:
     static constexpr float kPlayerMoveSpeed = 5.0f;
     static constexpr float kPlayerJumpSpeed = 9.0f;
     static constexpr float kPlayerGravity = 24.0f;
+    // ステージの床はY=0以上に配置されるため、床より十分下に落ちた位置を
+    // 強制復帰ラインとする。カメラの投影結果に依存せず、必ず落下を検出できる。
+    static constexpr float kPlayerFallLimitY = -3.0f;
     bool playerGrounded_ = false;
     Vector3 playerRespawnPosition_{1.5f,2.5f,0.0f};
     std::vector<uint8_t> runtimePlacementActive_;
@@ -201,12 +213,26 @@ private:
     std::vector<uint8_t> runtimeFallingFloorStates_;
     std::vector<float> runtimeFallingFloorTimers_;
     std::vector<float> runtimeFallingFloorVelocities_;
+    // Checkpoint / Save Pointが一度使用されたかを配置インデックス単位で保持する。
+    std::vector<uint8_t> runtimeSavePointUsed_;
     std::vector<uint8_t> runtimeTileActive_;
     float runtimeTime_ = 0.0f;
     float playerFlashTimer_ = 0.0f;
     float playerDamageCooldown_ = 0.0f;
     float runtimeMessageTimer_ = 0.0f;
     float doorCooldown_ = 0.0f;
+    // ゴール後にクリア画面を表示してから、タイトルへ自動遷移するまでの残り時間。
+    float clearReturnTimer_ = 0.0f;
+    // タイトルからゲームへ移る際のフェード演出を管理する。
+    float startTransitionTimer_ = 0.0f;
+    bool startTransitionActive_ = false;
+    bool startTransitionContinue_ = false;
+    // スタートからゴールを紹介して戻るカメラ演出の経過時間。
+    float introCameraTimer_ = 0.0f;
+    static constexpr float kIntroCameraDuration = 5.0f;
+    // ステージ紹介後、操作開始前に表示する3カウントの経過時間。
+    float startCountdownTimer_ = 0.0f;
+    static constexpr float kStartCountdownDuration = 3.0f;
     std::string runtimeMessage_;
     int collectedStars_ = 0;
     int collectedBubbles_ = 0;
@@ -222,6 +248,8 @@ private:
     std::vector<Snapshot> redoStack_;
     std::vector<std::string> stageFiles_;
     int selectedStageFile_ = -1;
+    // 削除確認ポップアップを開いている間、対象ファイルを固定して保持する。
+    std::string pendingDeleteFile_;
     std::vector<std::string> campaignFiles_;
     std::vector<std::string> availableFiles_;
     int selectedCampaignIndex_ = -1;
