@@ -24,6 +24,21 @@ void SceneDebugPanel::Draw(
 
     context->GetImGuiManager()->Begin();
 
+#ifdef PLAYER_RELEASE
+    // 配布用Releaseではデバッグ用の各ウィンドウを生成しない。
+    // Development版と共通のフェード・カウントダウン・クリア表示だけを
+    // swap chain上の全画面前景レイヤーへ描画する。
+    const ImGuiViewport* releaseViewport = ImGui::GetMainViewport();
+    stageEditor.DrawGameView(
+        releaseViewport->Pos.x,
+        releaseViewport->Pos.y,
+        releaseViewport->Size.x,
+        releaseViewport->Size.y
+    );
+    context->GetImGuiManager()->End();
+    return;
+#endif
+
     const bool gamePlayMode = stageEditor.IsGamePlayMode();
     if (!workspaceModeSyncInitialized_) {
         previousGamePlayMode_ = gamePlayMode;

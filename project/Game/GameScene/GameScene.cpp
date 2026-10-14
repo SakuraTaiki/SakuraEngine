@@ -31,7 +31,7 @@
 void GameScene::Initialize(EngineContext* context) {
     context_ = context;
 
-#ifndef USE_IMGUI
+#if !defined(USE_IMGUI) || defined(PLAYER_RELEASE)
     // Release版にはImGuiの表示切替がないため、ゲーム本編を直接起動する。
     // これによりタイトルOBJを含む一連のゲームループがexeでも描画される。
     drawMode_ = GameSceneDrawMode::NormalObj;

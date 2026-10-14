@@ -83,6 +83,27 @@ public:
     static Vector3 GridToWorld(int gridX, int gridY, float z = 0.0f);
 
 private:
+    struct TitleStartParticle {
+        std::unique_ptr<Object3d> object;
+        Vector3 position{};
+        Vector3 velocity{};
+        Vector4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        float age = 0.0f;
+        float lifetime = 0.8f;
+        float baseScale = 0.12f;
+        float rotationSpeed = 0.0f;
+    };
+
+    // Release版タイトルの背景を漂う、専用OBJを使用した小型ブロック。
+    struct TitleAmbientBlock {
+        std::unique_ptr<Object3d> object;
+        Vector3 baseOffset{};
+        Vector4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        float phase = 0.0f;
+        float speed = 1.0f;
+        float scale = 1.0f;
+    };
+
     struct Snapshot {
         std::vector<int> tiles;
         std::vector<Placement> placements;
@@ -119,6 +140,8 @@ private:
     void RespawnPlayer(bool damaged = false);
     void UpdatePlayer(Input* input);
     void UpdateGameFlow(Input* input);
+    void EmitTitleStartParticles();
+    void UpdateTitleStartParticles(float deltaTime);
     void UpdateRuntimeObjects(float deltaTime);
     void UpdateEnemies(float deltaTime);
     void UpdateGimmickCollisions(Input* input, float deltaTime);
@@ -191,8 +214,14 @@ private:
     std::unique_ptr<Object3d> cursorObject_;
     std::unique_ptr<Object3d> cursorFrameObject_;
     std::unique_ptr<Object3d> playerObject_;
-    // タイトル状態の間だけ表示する「PRISM PASSAGE」の3Dブロック文字。
-    std::unique_ptr<Object3d> titleObject_;
+    // 1文字ずつ奥から登場させる「PRISM PASSAGE」の3Dブロック文字。
+    std::vector<std::unique_ptr<Object3d>> titleLetterObjects_;
+    float titleLetterAnimationTimer_ = 0.0f;
+    // ゲーム名の下で点滅する「PRESS ENTER」の3Dブロック文字。
+    std::unique_ptr<Object3d> titlePromptObject_;
+    std::vector<TitleStartParticle> titleStartParticles_;
+    std::vector<TitleAmbientBlock> titleAmbientBlocks_;
+    float titleAmbientBlockTimer_ = 0.0f;
 
     Vector3 playerPosition_{1.5f, 2.5f, 0.0f};
     Vector3 playerVelocity_{};
@@ -227,6 +256,11 @@ private:
     float startTransitionTimer_ = 0.0f;
     bool startTransitionActive_ = false;
     bool startTransitionContinue_ = false;
+    // ブロック壁が完成し、中央の暗転を挟んでステージ側へ崩れるまでの総時間。
+    static constexpr float kStartTransitionDuration = 2.4f;
+    // Enter押下パーティクルを最後まで見せてからフェードを開始するための待機状態。
+    float titleStartEffectTimer_ = 0.0f;
+    bool titleStartEffectPending_ = false;
     // スタートからゴールを紹介して戻るカメラ演出の経過時間。
     float introCameraTimer_ = 0.0f;
     static constexpr float kIntroCameraDuration = 5.0f;
@@ -241,6 +275,7 @@ private:
     bool onOffActive_ = true;
     bool goalReached_ = false;
     GameFlowState gameFlowState_ = GameFlowState::Title;
+    float titlePromptBlinkTimer_ = 0.0f;
     bool hasSaveData_ = false;
     static constexpr const char* kProgressSavePath = "SaveData/stage_progress.json";
 
