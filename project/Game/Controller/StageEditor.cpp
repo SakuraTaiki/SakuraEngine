@@ -156,7 +156,7 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     object3dCommon_=common;
     environmentTexture_=environmentTexture;
     environmentCoefficient_=environmentCoefficient;
-#ifndef USE_IMGUI
+#if !defined(USE_IMGUI) || defined(PLAYER_RELEASE)
     // Release builds do not provide the editor UI, so starting in Editor
     // mode would leave the placement cursor visible with no way to enter
     // gameplay. Start directly in the runtime mode instead.
@@ -164,18 +164,69 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
 #endif
     ModelManager::Load("Resources/Editor", "joint_box.obj");
     ModelManager::Load("Resources/Editor", "ico_sphere.obj");
-    Model* titleModel = ModelManager::Load(
-        "Resources/Title",
-        "prism_passage_title.obj"
-    );
+    // タイトルは文字ごとのOBJとして読み込み、各文字を独立して動かす。
+    constexpr size_t titleLetterCount = 12;
+    titleLetterObjects_.reserve(titleLetterCount);
+    for (size_t i = 0; i < titleLetterCount; ++i) {
+        char fileName[64]{};
+        std::snprintf(fileName, sizeof(fileName), "title_letter_%02zu.obj", i);
+        Model* letterModel = ModelManager::Load("Resources/Title", fileName);
+        auto letterObject = std::make_unique<Object3d>();
+        letterObject->Initialize(object3dCommon_);
+        letterObject->SetModel(letterModel);
+        // テクスチャの控えめな白をそのまま表示するため、照明の影響を受けないようにする。
+        letterObject->SetEnableLighting(false);
+        letterObject->SetEnvironmentTexture(environmentTexture_);
+        letterObject->SetEnvironmentCoefficient(0.0f);
+        titleLetterObjects_.push_back(std::move(letterObject));
+    }
 
-    titleObject_ = std::make_unique<Object3d>();
-    titleObject_->Initialize(object3dCommon_);
-    titleObject_->SetModel(titleModel);
-    // テクスチャに用意した控えめな白を、そのまま表示するため照明を無効にする。
-    titleObject_->SetEnableLighting(false);
-    titleObject_->SetEnvironmentTexture(environmentTexture_);
-    titleObject_->SetEnvironmentCoefficient(0.0f);
+    Model* titlePromptModel = ModelManager::Load(
+        "Resources/Title",
+        "press_enter.obj"
+    );
+    titlePromptObject_ = std::make_unique<Object3d>();
+    titlePromptObject_->Initialize(object3dCommon_);
+    titlePromptObject_->SetModel(titlePromptModel);
+    titlePromptObject_->SetEnableLighting(false);
+    titlePromptObject_->SetEnvironmentTexture(environmentTexture_);
+    titlePromptObject_->SetEnvironmentCoefficient(0.0f);
+#ifdef PLAYER_RELEASE
+    // タイトル専用の小型ブロックOBJを複数生成し、背景に奥行きを作る。
+    Model* titleAmbientBlockModel = ModelManager::Load(
+        "Resources/Title",
+        "title_block_particle.obj"
+    );
+    constexpr Vector3 ambientBlockOffsets[] = {
+        {-8.4f,  3.8f, 24.0f}, {-6.9f, -1.9f, 25.5f}, {-5.4f,  4.5f, 27.0f},
+        {-3.8f, -3.9f, 26.0f}, {-2.4f,  3.6f, 28.0f}, {-0.8f, -4.5f, 24.8f},
+        { 1.0f,  4.4f, 26.8f}, { 2.6f, -3.7f, 28.2f}, { 4.1f,  3.7f, 25.2f},
+        { 5.7f, -2.6f, 27.5f}, { 7.2f,  4.2f, 24.5f}, { 8.6f, -1.4f, 26.5f},
+        {-9.2f,  0.7f, 28.5f}, {-4.7f,  0.2f, 29.0f}, { 4.9f,  0.5f, 29.2f},
+        { 9.3f,  1.3f, 28.0f}
+    };
+    constexpr Vector4 ambientBlockColors[] = {
+        {0.82f, 0.86f, 0.91f, 0.58f},
+        {0.38f, 0.72f, 0.82f, 0.52f},
+        {0.62f, 0.50f, 0.78f, 0.50f}
+    };
+    titleAmbientBlocks_.reserve(std::size(ambientBlockOffsets));
+    for (size_t i = 0; i < std::size(ambientBlockOffsets); ++i) {
+        TitleAmbientBlock block{};
+        block.object = std::make_unique<Object3d>();
+        block.object->Initialize(object3dCommon_);
+        block.object->SetModel(titleAmbientBlockModel);
+        block.object->SetEnableLighting(false);
+        block.object->SetEnvironmentTexture(environmentTexture_);
+        block.object->SetEnvironmentCoefficient(0.0f);
+        block.baseOffset = ambientBlockOffsets[i];
+        block.color = ambientBlockColors[i % std::size(ambientBlockColors)];
+        block.phase = static_cast<float>(i) * 0.73f;
+        block.speed = 0.55f + static_cast<float>(i % 5) * 0.09f;
+        block.scale = 0.24f + static_cast<float>(i % 4) * 0.055f;
+        titleAmbientBlocks_.push_back(std::move(block));
+    }
+#endif
     Model* cursorFrameModel=ModelManager::Load("Resources/Editor","placement_cursor_frame.obj");
     cursorFrameObject_=std::make_unique<Object3d>();
     cursorFrameObject_->Initialize(object3dCommon_);
@@ -195,15 +246,20 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     RefreshStageFiles();
     LoadPlaylist();
     RefreshSaveDataAvailability();
-#ifndef USE_IMGUI
-    if (!campaignFiles_.empty()) {
-        std::filesystem::path stagePath = campaignFiles_.front();
-        if (!stagePath.has_parent_path()) {
-            stagePath = std::filesystem::path("Resources/Stages") / stagePath;
-        }
-        LoadStage(stagePath.string());
-    } else if (!stageFiles_.empty()) {
-        LoadStage(stageFiles_.front());
+#if !defined(USE_IMGUI) || defined(PLAYER_RELEASE)
+    // Release版はエディターやプレイリストの選択状態に依存させず、
+    // 製品版ステージとして指定したSaveStage.jsonだけを読み込む。
+    // ビルド後はResourcesフォルダーごとexeの隣へコピーされるため、
+    // 開発環境と配布用exeのどちらでも同じ相対パスを使用できる。
+    constexpr const char* releaseStagePath = "Resources/Stages/SaveStage.json";
+    if (LoadStage(releaseStagePath)) {
+        mode_ = Mode::GamePlay;
+        gameFlowState_ = GameFlowState::Title;
+        titleLetterAnimationTimer_ = 0.0f;
+        status_ = "Release stage loaded: SaveStage.json";
+    } else {
+        // 読み込みに失敗しても不正な別ステージへ切り替えず、原因をデバッガへ通知する。
+        OutputDebugStringA("Release startup failed: Resources/Stages/SaveStage.json could not be loaded.\n");
     }
 #endif
 }
@@ -211,7 +267,10 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
 // 処理概要: 所有しているリソースと実行状態を安全に終了する。
 // 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void StageEditor::Finalize() {
-    titleObject_.reset();
+    titleAmbientBlocks_.clear();
+    titleStartParticles_.clear();
+    titlePromptObject_.reset();
+    titleLetterObjects_.clear();
     playerObject_.reset();
     cursorFrameObject_.reset();
     cursorObject_.reset();
@@ -230,6 +289,7 @@ void StageEditor::Update(Input* input) {
 
     constexpr float deltaTime = 1.0f / 60.0f;
     if (mode_ == Mode::GamePlay) UpdateGameFlow(input);
+    UpdateTitleStartParticles(deltaTime);
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) UpdateRuntimeObjects(deltaTime);
     for (auto& object:tileObjects_) if(object) object->Update();
     for (auto& object:objects_) if(object) object->Update();
@@ -249,27 +309,262 @@ void StageEditor::Update(Input* input) {
         cursorFrameObject_->Update();
     }
 
-    if (titleObject_ && mode_ == Mode::GamePlay &&
+#ifdef PLAYER_RELEASE
+    if (!titleAmbientBlocks_.empty() && mode_ == Mode::GamePlay &&
         gameFlowState_ == GameFlowState::Title) {
+        titleAmbientBlockTimer_ += deltaTime;
         Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
         if (camera) {
             const Vector3& cameraPosition = camera->GetTranslate();
-            // カメラの正面へ固定することで、ステージ幅やロードしたデータに左右されず
-            // タイトルを常に同じ大きさ・同じ位置へ表示する。
-            titleObject_->SetPosition({
-                cameraPosition.x,
-                cameraPosition.y + 2.2f,
-                cameraPosition.z + 22.0f
-            });
-            // BlenderのOBJ出力はZ-up、ゲーム側はY-upのため、変換後の文字面が
-            // 水平を向く。X軸へ90度回して、押し出し面ではなく文字の正面を向ける。
-            titleObject_->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
-            // 現在は文字メッシュの裏側をカメラから見ているため左右が反転する。
-            // ローカルXだけを反転し、正しい「PRISM PASSAGE」の並びへ戻す。
-            titleObject_->SetScale({-1.0f, 1.0f, 1.0f});
-            titleObject_->Update();
+            for (size_t i = 0; i < titleAmbientBlocks_.size(); ++i) {
+                auto& block = titleAmbientBlocks_[i];
+                if (!block.object) continue;
+
+                const float time = titleAmbientBlockTimer_ * block.speed + block.phase;
+                // 縦方向を主軸にゆっくり漂わせ、横方向は小さく揺らして文字を遮らない。
+                const float transitionProgress = startTransitionActive_
+                    ? std::clamp(
+                        startTransitionTimer_ / (kStartTransitionDuration * 0.5f),
+                        0.0f,
+                        1.0f)
+                    : 0.0f;
+                const float escapeDirection = block.baseOffset.x < 0.0f ? -1.0f : 1.0f;
+                block.object->SetPosition({
+                    cameraPosition.x + block.baseOffset.x + std::sin(time * 0.7f) * 0.22f +
+                        escapeDirection * transitionProgress * 7.5f,
+                    cameraPosition.y + block.baseOffset.y + std::sin(time) * 0.42f,
+                    cameraPosition.z + block.baseOffset.z + transitionProgress * 4.0f
+                });
+                block.object->SetRotation({
+                    time * 0.45f,
+                    time * 0.62f,
+                    time * 0.30f
+                });
+                const float pulse = 0.88f + 0.12f * std::sin(time * 1.4f);
+                const float scale = block.scale * pulse;
+                block.object->SetScale({scale, scale, scale});
+                Vector4 transitionColor = block.color;
+                transitionColor.w *= 1.0f - transitionProgress * 0.75f;
+                block.object->SetColor(transitionColor);
+                block.object->Update();
+            }
         }
+    } else {
+        titleAmbientBlockTimer_ = 0.0f;
     }
+#endif
+
+    if (!titleLetterObjects_.empty() && mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::Title) {
+        titleLetterAnimationTimer_ += deltaTime;
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            const Vector3& cameraPosition = camera->GetTranslate();
+            constexpr float targetOffsets[] = {
+                -6.564614f, -5.441343f, -4.619050f, -3.851377f,
+                -2.676099f, -0.524542f,  0.656207f,  1.864047f,
+                 2.959787f,  4.167627f,  5.438631f,  6.567530f
+            };
+            constexpr float letterDelay = 0.08f;
+            constexpr float letterDuration = 0.90f;
+
+#ifdef PLAYER_RELEASE
+            // タイトル画面を展示用に繰り返すRelease版では、最後の文字が整列した後も
+            // すぐに巻き戻さず、完成したロゴを確認できる時間を設けてから再演する。
+            constexpr float completedTitleHoldDuration = 2.5f;
+            const float titleAnimationDuration = letterDuration +
+                static_cast<float>(titleLetterObjects_.size() - 1) * letterDelay;
+            if (titleLetterAnimationTimer_ >=
+                titleAnimationDuration + completedTitleHoldDuration) {
+                titleLetterAnimationTimer_ = 0.0f;
+            }
+#endif
+
+            for (size_t i = 0; i < titleLetterObjects_.size(); ++i) {
+                auto& letter = titleLetterObjects_[i];
+                if (!letter) continue;
+
+                // 文字ごとに開始時刻をずらし、左から順番に飛び込んでくる流れを作る。
+                const float localTime = titleLetterAnimationTimer_ - static_cast<float>(i) * letterDelay;
+                const float progress = std::clamp(localTime / letterDuration, 0.0f, 1.0f);
+                // 終点付近でゆっくり止まるイーズアウトにし、文字が整列する瞬間を見やすくする。
+                const float inverse = 1.0f - progress;
+                const float eased = 1.0f - inverse * inverse * inverse;
+                const float remaining = 1.0f - eased;
+                const float direction = (i % 2 == 0) ? 1.0f : -1.0f;
+                const float gateProgress = startTransitionActive_
+                    ? std::clamp(
+                        startTransitionTimer_ / (kStartTransitionDuration * 0.5f),
+                        0.0f,
+                        1.0f)
+                    : 0.0f;
+                // 決定後は中央に通路を作るよう、左半分と右半分をそれぞれ外側へ開く。
+                const float gateDirection = i < titleLetterObjects_.size() / 2 ? -1.0f : 1.0f;
+
+                letter->SetPosition({
+                    cameraPosition.x + targetOffsets[i] + gateDirection * gateProgress * 4.5f,
+                    cameraPosition.y + 2.2f + direction * remaining * 1.1f +
+                        std::sin(gateProgress * kPi) * 0.6f,
+                    // カメラ奥から最終位置へ近づけ、遠近感でも文字を小さく見せる。
+                    cameraPosition.z + 22.0f + remaining * 24.0f - gateProgress * 5.0f
+                });
+                letter->SetRotation({
+                    kPi * 0.5f + direction * remaining * kPi * 2.0f,
+                    remaining * kPi * 1.5f + gateDirection * gateProgress * 0.45f,
+                    direction * remaining * kPi + gateDirection * gateProgress * 0.2f
+                });
+                // 裏面を見て左右反転しないよう、従来と同じローカルX反転を維持する。
+                const float gateScale = 1.0f + gateProgress * 0.22f;
+                letter->SetScale({-gateScale, gateScale, gateScale});
+                letter->Update();
+            }
+        }
+    } else if (gameFlowState_ != GameFlowState::Title) {
+        titleLetterAnimationTimer_ = 0.0f;
+    }
+
+    if (titlePromptObject_ && mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::Title) {
+        titlePromptBlinkTimer_ += deltaTime;
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            const Vector3& cameraPosition = camera->GetTranslate();
+            titlePromptObject_->SetPosition({
+                cameraPosition.x,
+                // 現在のカメラ距離と720px基準の表示範囲では、約2.8ワールド単位が
+                // 画面上のおよそ200pxに相当するため、従来位置からその分だけ下げる。
+                cameraPosition.y - 2.95f +
+                    std::sin(titlePromptBlinkTimer_ * (2.0f * kPi / 2.2f)) * 0.15f,
+                cameraPosition.z + 21.8f
+            });
+            // ゲーム名と同じ座標変換を適用し、正面から正しく読める向きにする。
+            titlePromptObject_->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+            titlePromptObject_->SetScale({-1.0f, 1.0f, 1.0f});
+
+            // 約1.6秒周期で明暗を滑らかに往復させる。
+            // 完全に消さず最低25%を残し、入力案内を見失わないようにする。
+            constexpr float blinkCycleSeconds = 1.6f;
+            const float wave = 0.5f + 0.5f * std::sin(
+                titlePromptBlinkTimer_ * (2.0f * kPi / blinkCycleSeconds)
+            );
+            const float transitionFade = startTransitionActive_
+                ? 1.0f - std::clamp(
+                    startTransitionTimer_ / (kStartTransitionDuration * 0.28f),
+                    0.0f,
+                    1.0f)
+                : 1.0f;
+            const float alpha = (0.25f + wave * 0.75f) * transitionFade;
+            titlePromptObject_->SetColor({1.0f, 1.0f, 1.0f, alpha});
+            titlePromptObject_->Update();
+        }
+    } else {
+        titlePromptBlinkTimer_ = 0.0f;
+    }
+}
+
+// 処理概要: 決定入力時にPRESS ENTERの中央から短時間の粒を放射する。
+// 注意事項: タイトルと調和する白・水色・薄紫だけを使い、派手になりすぎない数に抑える。
+void StageEditor::EmitTitleStartParticles() {
+    Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+#ifdef PLAYER_RELEASE
+    // Release版ではタイトル背景と同じブロックを放射し、ゲート形成へ視線を誘導する。
+    Model* particleModel = ModelManager::Find(
+        "Resources/Title/title_block_particle.obj"
+    );
+#else
+    Model* particleModel = ModelManager::Find(
+        "Resources/Editor/ico_sphere.obj"
+    );
+#endif
+    if (!camera || !particleModel) {
+        return;
+    }
+
+    titleStartParticles_.clear();
+    constexpr int particleCount = 24;
+    const Vector3& cameraPosition = camera->GetTranslate();
+    const Vector3 origin{
+        cameraPosition.x,
+        cameraPosition.y - 2.95f,
+        cameraPosition.z + 21.5f
+    };
+    const Vector4 colors[] = {
+        {0.86f, 0.88f, 0.90f, 1.0f},
+        {0.35f, 0.87f, 0.90f, 1.0f},
+        {0.66f, 0.55f, 0.78f, 1.0f}
+    };
+
+    titleStartParticles_.reserve(particleCount);
+    for (int i = 0; i < particleCount; ++i) {
+        const float angle = (2.0f * kPi * static_cast<float>(i)) /
+            static_cast<float>(particleCount);
+        const float speed = 2.2f + static_cast<float>((i * 7) % 6) * 0.18f;
+
+        TitleStartParticle particle{};
+        particle.object = std::make_unique<Object3d>();
+        particle.object->Initialize(object3dCommon_);
+        particle.object->SetModel(particleModel);
+        particle.object->SetEnableLighting(false);
+        particle.object->SetEnvironmentTexture(environmentTexture_);
+        particle.object->SetEnvironmentCoefficient(0.0f);
+        particle.position = origin;
+        particle.velocity = {
+            std::cos(angle) * speed,
+            std::sin(angle) * speed * 0.72f + 0.35f,
+            -0.15f - static_cast<float>(i % 3) * 0.05f
+        };
+        particle.color = colors[i % 3];
+        particle.lifetime = 0.65f + static_cast<float>(i % 5) * 0.045f;
+        particle.baseScale = 0.08f + static_cast<float>(i % 4) * 0.025f;
+        particle.rotationSpeed = 3.0f + static_cast<float>(i % 7) * 0.55f;
+        particle.object->SetPosition(particle.position);
+        particle.object->SetScale({
+            particle.baseScale,
+            particle.baseScale,
+            particle.baseScale
+        });
+        particle.object->SetColor(particle.color);
+        particle.object->Update();
+        titleStartParticles_.push_back(std::move(particle));
+    }
+}
+
+// 処理概要: 放射したタイトル粒子を広げながら縮小・消滅させる。
+// 注意事項: ゲーム状態がタイトルから切り替わっても、寿命までは更新して自然に消す。
+void StageEditor::UpdateTitleStartParticles(float deltaTime) {
+    for (auto& particle : titleStartParticles_) {
+        particle.age += deltaTime;
+        particle.velocity.y -= 0.9f * deltaTime;
+        particle.position.x += particle.velocity.x * deltaTime;
+        particle.position.y += particle.velocity.y * deltaTime;
+        particle.position.z += particle.velocity.z * deltaTime;
+
+        const float progress = std::clamp(
+            particle.age / particle.lifetime,
+            0.0f,
+            1.0f
+        );
+        const float scale = particle.baseScale * (1.0f - progress * 0.65f);
+        Vector4 color = particle.color;
+        color.w = 1.0f - progress;
+
+        particle.object->SetPosition(particle.position);
+        particle.object->SetRotation({
+            particle.age * particle.rotationSpeed,
+            particle.age * particle.rotationSpeed * 0.7f,
+            particle.age * particle.rotationSpeed * 0.4f
+        });
+        particle.object->SetScale({scale, scale, scale});
+        particle.object->SetColor(color);
+        particle.object->Update();
+    }
+
+    std::erase_if(
+        titleStartParticles_,
+        [](const TitleStartParticle& particle) {
+            return particle.age >= particle.lifetime;
+        }
+    );
 }
 
 // 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
@@ -279,22 +574,34 @@ void StageEditor::Draw3D() {
         return;
     }
 
-    for (size_t i = 0; i < tileObjects_.size(); ++i) {
-        if (!tileObjects_[i]) continue;
-        if (mode_ == Mode::GamePlay) {
-            if (i < runtimeTileActive_.size() && runtimeTileActive_[i] == 0) continue;
-            const int itemId = i < tiles_.size() ? tiles_[i] : 0;
-            if ((itemId == 11 && !onOffActive_) || (itemId == 12 && onOffActive_)) continue;
+    // タイトル画面では、読み込み済みのステージを描画しない。
+    // ステージデータ自体はメモリ上に保持しておき、フェード中央で
+    // IntroCameraへ切り替わったフレームから描画を開始する。
+    const bool drawStageContents =
+        mode_ != Mode::GamePlay || gameFlowState_ != GameFlowState::Title;
+
+    if (drawStageContents) {
+        for (size_t i = 0; i < tileObjects_.size(); ++i) {
+            if (!tileObjects_[i]) continue;
+            if (mode_ == Mode::GamePlay) {
+                if (i < runtimeTileActive_.size() && runtimeTileActive_[i] == 0) continue;
+                const int itemId = i < tiles_.size() ? tiles_[i] : 0;
+                if ((itemId == 11 && !onOffActive_) || (itemId == 12 && onOffActive_)) continue;
+            }
+            tileObjects_[i]->Draw();
         }
-        tileObjects_[i]->Draw();
+
+        for (size_t i = 0; i < objects_.size(); ++i) {
+            // Player Start is an editor marker, not a runtime object.
+            if (mode_ == Mode::GamePlay &&
+                (i >= placements_.size() || placements_[i].itemId == 25 || !IsRuntimePlacementActive(i))) continue;
+            if (objects_[i]) objects_[i]->Draw();
+        }
+
+        if (playerObject_ && mode_ == Mode::GamePlay) {
+            playerObject_->Draw();
+        }
     }
-    for (size_t i = 0; i < objects_.size(); ++i) {
-        // Player Start is an editor marker, not a runtime object.
-        if (mode_ == Mode::GamePlay &&
-            (i >= placements_.size() || placements_[i].itemId == 25 || !IsRuntimePlacementActive(i))) continue;
-        if (objects_[i]) objects_[i]->Draw();
-    }
-    if(playerObject_ && mode_==Mode::GamePlay && gameFlowState_!=GameFlowState::Title) playerObject_->Draw();
     // 配置済みの実体と半透明プレビューを同じ座標へ描画すると、
     // 深度値が競合して一瞬別画像のようにちらつく（Z-fighting）。
     // 既に配置されている場所ではプレビュー本体だけを隠し、
@@ -317,10 +624,29 @@ void StageEditor::Draw3D() {
     }
     if(cursorFrameObject_ && mode_==Mode::Editor) cursorFrameObject_->Draw();
 
+    // 背景ブロックを先に描画し、タイトル文字の読みやすさを最前面で保つ。
+#ifdef PLAYER_RELEASE
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Title) {
+        for (auto& block : titleAmbientBlocks_) {
+            if (block.object) block.object->Draw();
+        }
+    }
+#endif
+
     // ゲーム名はタイトル画面だけに表示し、開始後のプレイ画面には残さない。
-    if (titleObject_ && mode_ == Mode::GamePlay &&
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Title) {
+        for (auto& letter : titleLetterObjects_) {
+            if (letter) letter->Draw();
+        }
+    }
+    if (titlePromptObject_ && mode_ == Mode::GamePlay &&
         gameFlowState_ == GameFlowState::Title) {
-        titleObject_->Draw();
+        titlePromptObject_->Draw();
+    }
+    for (auto& particle : titleStartParticles_) {
+        if (particle.object) {
+            particle.object->Draw();
+        }
     }
 }
 
@@ -460,6 +786,12 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         return;
     }
 
+#ifdef PLAYER_RELEASE
+    // Release版はゲーム画像を直接ウィンドウへ表示するため、編集用のItemは存在しない。
+    // 前景レイヤーへゲーム演出だけを描き、エディター入力は完全に無効化する。
+    gameViewHovered_ = false;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+#else
     gameViewHovered_=ImGui::IsItemHovered();
 
     // ゲームビュー画像の上で回したホイールは、この画像の操作として扱う。
@@ -471,10 +803,13 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
 
     HandleEditorInput(x, y, width, height);
     ImDrawList* draw=ImGui::GetWindowDrawList();
+#endif
     const bool editing=mode_==Mode::Editor;
+#ifndef PLAYER_RELEASE
     const ImU32 color=editing?IM_COL32(38,145,235,235):IM_COL32(35,185,85,235);
     draw->AddRectFilled({x+10,y+10},{x+174,y+40},color,5);
     draw->AddText({x+20,y+18},IM_COL32_WHITE,editing?"EDITOR MODE":"GAMEPLAY MODE");
+#endif
     if(editing){
         char buffer[160]{};
         const int gridX=static_cast<int>(std::floor(cursorPosition_.x/kTileWorldSize));
@@ -487,14 +822,15 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         // 3Dタイトルが読める程度に背景だけを落ち着かせる。
         // 旧仮タイトル文字は、OBJ版「PRISM PASSAGE」と重なるため描画しない。
         draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(5,10,22,115));
-        const char* start="ENTER / GAMEPAD A : NEW GAME";
-        const ImVec2 startSize=ImGui::CalcTextSize(start);
-        draw->AddText({x+(width-startSize.x)*0.5f,y+height*0.48f},IM_COL32_WHITE,start);
+        // Release版は新規ゲームとしてSaveStage.jsonを開始するため、
+        // 開発確認用のコンティニュー案内をタイトル画面へ表示しない。
+#ifndef PLAYER_RELEASE
         if(hasSaveData_){
             const char* resume="C / GAMEPAD Y : CONTINUE FROM SAVE POINT";
             const ImVec2 resumeSize=ImGui::CalcTextSize(resume);
             draw->AddText({x+(width-resumeSize.x)*0.5f,y+height*0.55f},IM_COL32(255,220,80,255),resume);
         }
+#endif
     } else if (gameFlowState_ == GameFlowState::Clear) {
         draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(4,18,10,220));
         const char* clear="STAGE CLEAR!";
@@ -549,75 +885,95 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         draw->AddText(textPosition, goalReached_ ? IM_COL32(90,255,120,255) : IM_COL32(255,235,90,255), runtimeMessage_.c_str());
     }
 
-    // タイトル画面を三角形のディゾルブで覆い、完全に暗くなった瞬間にゲームへ
-    // 切り替えた後、三角形を逆方向へ消してゲーム画面を見せる。
-    // 画面全体を均一に暗くするだけではなく、小さな三角形ごとに異なる開始時間を
-    // 与えることで、画面が細かく分解・再構築されるような演出にする。
+    // 小型ブロックが画面奥から飛来して一枚の壁を組み上げ、完全に隠れた瞬間に
+    // ステージへ切り替える。後半は壁を奥へ崩し、隙間からプレイ画面を公開する。
     if (startTransitionActive_) {
-        constexpr float transitionDuration = 1.0f;
+        constexpr float transitionDuration = kStartTransitionDuration;
         constexpr float halfDuration = transitionDuration * 0.5f;
-        const float dissolveProgress = startTransitionTimer_ < halfDuration
-            ? startTransitionTimer_ / halfDuration
-            : (transitionDuration - startTransitionTimer_) / halfDuration;
-        const float clampedProgress = std::clamp(dissolveProgress, 0.0f, 1.0f);
+        const bool openingStage = startTransitionTimer_ >= halfDuration;
+        const float phaseProgress = openingStage
+            ? (startTransitionTimer_ - halfDuration) / halfDuration
+            : startTransitionTimer_ / halfDuration;
+        const float clampedPhase = std::clamp(phaseProgress, 0.0f, 1.0f);
+        const float easedPhase = clampedPhase * clampedPhase * (3.0f - 2.0f * clampedPhase);
+        const float wallProgress = openingStage ? 1.0f - easedPhase : easedPhase;
 
-        constexpr float triangleCellSize = 48.0f;
-        constexpr float dissolveEdgeWidth = 0.18f;
-        const int columnCount = static_cast<int>(std::ceil(width / triangleCellSize));
-        const int rowCount = static_cast<int>(std::ceil(height / triangleCellSize));
+        draw->PushClipRect({x, y}, {x + width, y + height}, true);
+        constexpr float blockWidth = 80.0f;
+        constexpr float blockHeight = 58.0f;
+        constexpr float buildEdgeWidth = 0.24f;
+        const int columnCount = static_cast<int>(std::ceil(width / blockWidth)) + 1;
+        const int rowCount = static_cast<int>(std::ceil(height / blockHeight)) + 1;
+        const float centerColumn = static_cast<float>(columnCount - 1) * 0.5f;
+        const float centerRow = static_cast<float>(rowCount - 1) * 0.5f;
+        const float maximumDistance = std::sqrt(
+            centerColumn * centerColumn + centerRow * centerRow);
 
-        // 同じセルは毎回同じ順番で現れるよう、座標から軽量なハッシュ値を作る。
-        // std::rand()を使わないため、フレームごとに模様がちらつかない。
-        const auto makeThreshold = [](int column, int row, int triangleIndex) {
+        // 中央から外側へ組み上がる順番に小さなばらつきを加え、機械的すぎない壁にする。
+        const auto makeVariation = [](int column, int row) {
             uint32_t value = static_cast<uint32_t>(column) * 73856093u;
             value ^= static_cast<uint32_t>(row) * 19349663u;
-            value ^= static_cast<uint32_t>(triangleIndex + 1) * 83492791u;
             value ^= value >> 13;
             value *= 1274126177u;
             value ^= value >> 16;
             return static_cast<float>(value & 0xffffu) / 65535.0f;
         };
 
-        draw->PushClipRect({x, y}, {x + width, y + height}, true);
         for (int row = 0; row < rowCount; ++row) {
             for (int column = 0; column < columnCount; ++column) {
-                const float left = x + static_cast<float>(column) * triangleCellSize;
-                const float top = y + static_cast<float>(row) * triangleCellSize;
-                const float right = left + triangleCellSize + 1.0f;
-                const float bottom = top + triangleCellSize + 1.0f;
-
-                for (int triangleIndex = 0; triangleIndex < 2; ++triangleIndex) {
-                    const float threshold =
-                        makeThreshold(column, row, triangleIndex) *
-                        (1.0f - dissolveEdgeWidth);
-                    const float triangleAlpha = std::clamp(
-                        (clampedProgress - threshold) / dissolveEdgeWidth,
-                        0.0f,
-                        1.0f);
-                    if (triangleAlpha <= 0.0f) {
-                        continue;
-                    }
-
-                    const ImU32 color = IM_COL32(
-                        0,
-                        0,
-                        0,
-                        static_cast<int>(triangleAlpha * 255.0f));
-                    if (triangleIndex == 0) {
-                        draw->AddTriangleFilled(
-                            {left, top},
-                            {right, top},
-                            {left, bottom},
-                            color);
-                    } else {
-                        draw->AddTriangleFilled(
-                            {right, top},
-                            {right, bottom},
-                            {left, bottom},
-                            color);
-                    }
+                const float distance = std::sqrt(
+                    std::pow(static_cast<float>(column) - centerColumn, 2.0f) +
+                    std::pow(static_cast<float>(row) - centerRow, 2.0f));
+                const float radialOrder = maximumDistance > 0.0f
+                    ? distance / maximumDistance
+                    : 0.0f;
+                const float variation = makeVariation(column, row);
+                const float threshold = std::clamp(
+                    radialOrder * 0.72f + variation * 0.12f,
+                    0.0f,
+                    1.0f - buildEdgeWidth);
+                const float blockAmount = std::clamp(
+                    (wallProgress - threshold) / buildEdgeWidth,
+                    0.0f,
+                    1.0f);
+                if (blockAmount <= 0.0f) {
+                    continue;
                 }
+
+                // 前半は奥から手前へ飛来し、後半は再び奥へ吸い込まれるように縮小する。
+                const float blockScale = 0.25f + blockAmount * 0.83f;
+                const float cellCenterX = x + (static_cast<float>(column) + 0.5f) * blockWidth;
+                const float cellCenterY = y + (static_cast<float>(row) + 0.5f) * blockHeight;
+                const float halfWidth = blockWidth * 0.5f * blockScale + 1.0f;
+                const float halfHeight = blockHeight * 0.5f * blockScale + 1.0f;
+                const ImVec2 minimum{cellCenterX - halfWidth, cellCenterY - halfHeight};
+                const ImVec2 maximum{cellCenterX + halfWidth, cellCenterY + halfHeight};
+                const int alpha = static_cast<int>(blockAmount * 255.0f);
+                const int colorVariant = (column + row * 2) % 3;
+                const ImU32 faceColor = colorVariant == 0
+                    ? IM_COL32(18, 27, 48, alpha)
+                    : colorVariant == 1
+                        ? IM_COL32(26, 38, 62, alpha)
+                        : IM_COL32(31, 29, 57, alpha);
+                draw->AddRectFilled(minimum, maximum, faceColor, 4.0f);
+
+                // 上辺と右辺に異なる明度を付け、平面ではなく積み上がったブロックに見せる。
+                draw->AddLine(
+                    {minimum.x + 3.0f, minimum.y + 3.0f},
+                    {maximum.x - 3.0f, minimum.y + 3.0f},
+                    IM_COL32(105, 185, 215, static_cast<int>(blockAmount * 150.0f)),
+                    2.0f);
+                draw->AddLine(
+                    {maximum.x - 3.0f, minimum.y + 3.0f},
+                    {maximum.x - 3.0f, maximum.y - 3.0f},
+                    IM_COL32(82, 58, 130, static_cast<int>(blockAmount * 175.0f)),
+                    3.0f);
             }
+        }
+
+        // ステージ切替フレームだけは継ぎ目も完全に隠し、切替前後の画像混入を防ぐ。
+        if (std::abs(startTransitionTimer_ - halfDuration) < 0.035f) {
+            draw->AddRectFilled({x, y}, {x + width, y + height}, IM_COL32(8, 12, 24, 255));
         }
         draw->PopClipRect();
     }
@@ -807,8 +1163,22 @@ void StageEditor::SetMode(Mode mode){
 void StageEditor::UpdateGameFlow(Input* input) {
     if (!input) return;
     constexpr float deltaTime = 1.0f / 60.0f;
-    constexpr float startTransitionDuration = 1.0f;
+    constexpr float startTransitionDuration = kStartTransitionDuration;
     constexpr float startTransitionSwitchTime = startTransitionDuration * 0.5f;
+    // 最長のタイトル粒子（約0.83秒）が消えてからフェードを開始する。
+    constexpr float titleStartEffectDuration = 0.85f;
+
+    if (titleStartEffectPending_) {
+        titleStartEffectTimer_ += deltaTime;
+        if (titleStartEffectTimer_ >= titleStartEffectDuration) {
+            titleStartEffectPending_ = false;
+            titleStartEffectTimer_ = 0.0f;
+            startTransitionActive_ = true;
+            startTransitionContinue_ = false;
+        }
+        // 演出待機中は追加の決定入力を受け付けず、フェードも進めない。
+        return;
+    }
 
     // フェードの中央（画面が完全に黒い瞬間）でタイトルからゲームへ切り替える。
     // 演出中は追加の決定入力を受け付けず、二重開始を防止する。
@@ -869,7 +1239,11 @@ void StageEditor::UpdateGameFlow(Input* input) {
             }
         } else if (accept) {
             ResetRuntimeState();
-            startTransitionActive_ = true;
+            EmitTitleStartParticles();
+            // 先に粒子だけを再生し、完了後に上部の待機処理からフェードへ接続する。
+            titleStartEffectPending_ = true;
+            titleStartEffectTimer_ = 0.0f;
+            startTransitionActive_ = false;
             startTransitionContinue_ = false;
         }
     } else if (gameFlowState_ == GameFlowState::Clear) {
@@ -900,6 +1274,8 @@ void StageEditor::ResetRuntimeState() {
     startTransitionTimer_ = 0.0f;
     startTransitionActive_ = false;
     startTransitionContinue_ = false;
+    titleStartEffectTimer_ = 0.0f;
+    titleStartEffectPending_ = false;
     introCameraTimer_ = 0.0f;
     startCountdownTimer_ = 0.0f;
     playerFlashTimer_ = 0.0f;
