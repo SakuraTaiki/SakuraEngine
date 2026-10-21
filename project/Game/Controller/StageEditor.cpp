@@ -27,6 +27,19 @@
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
+constexpr float kTitleBounceDuration = 0.22f;
+constexpr float kTitleStorageStart = 0.18f;
+constexpr float kTitleStorageDelay = 0.055f;
+constexpr float kTitleStorageDuration = 0.20f;
+
+// 左端、右端、左から2文字目、右から2文字目……の順番を返す。
+// 偶数番を左、奇数番を右へ割り当てることで、最後は中央の文字になる。
+float GetTitleStorageOrder(size_t index, size_t letterCount) {
+    const size_t half = letterCount / 2;
+    return static_cast<float>(index < half
+        ? index * 2
+        : (letterCount - 1 - index) * 2 + 1);
+}
 
 const StageEditor::ItemDefinition kItems[] = {
     {1, "Ground", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.32f,0.72f,0.25f,1}, {2.0f,0.5f,1.0f}},
@@ -191,12 +204,29 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     titlePromptObject_->SetEnableLighting(false);
     titlePromptObject_->SetEnvironmentTexture(environmentTexture_);
     titlePromptObject_->SetEnvironmentCoefficient(0.0f);
-#ifdef PLAYER_RELEASE
-    // タイトル専用の小型ブロックOBJを複数生成し、背景に奥行きを作る。
+    constexpr const char* countdownModelFiles[] = {
+        "countdown_1.obj", "countdown_2.obj", "countdown_3.obj"
+    };
+    countdownDigitObjects_.reserve(std::size(countdownModelFiles));
+    for (const char* modelFile : countdownModelFiles) {
+        auto digitObject = std::make_unique<Object3d>();
+        digitObject->Initialize(object3dCommon_);
+        digitObject->SetModel(ModelManager::Load("Resources/Title", modelFile));
+        digitObject->SetEnableLighting(false);
+        digitObject->SetEnvironmentTexture(environmentTexture_);
+        digitObject->SetEnvironmentCoefficient(0.0f);
+        countdownDigitObjects_.push_back(std::move(digitObject));
+    }
+    // 決定パーティクルはDevelopmentでも確認できるよう、専用ブロックを常に読み込む。
     Model* titleAmbientBlockModel = ModelManager::Load(
         "Resources/Title",
         "title_block_particle.obj"
     );
+#ifndef PLAYER_RELEASE
+    (void)titleAmbientBlockModel;
+#endif
+#ifdef PLAYER_RELEASE
+    // タイトル専用の小型ブロックOBJを複数生成し、背景に奥行きを作る。
     constexpr Vector3 ambientBlockOffsets[] = {
         {-8.4f,  3.8f, 24.0f}, {-6.9f, -1.9f, 25.5f}, {-5.4f,  4.5f, 27.0f},
         {-3.8f, -3.9f, 26.0f}, {-2.4f,  3.6f, 28.0f}, {-0.8f, -4.5f, 24.8f},
@@ -206,9 +236,9 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
         { 9.3f,  1.3f, 28.0f}
     };
     constexpr Vector4 ambientBlockColors[] = {
-        {0.82f, 0.86f, 0.91f, 0.58f},
-        {0.38f, 0.72f, 0.82f, 0.52f},
-        {0.62f, 0.50f, 0.78f, 0.50f}
+        {0.64f, 0.30f, 1.00f, 0.66f}, // vivid violet
+        {0.15f, 0.85f, 1.00f, 0.62f}, // cyan
+        {1.00f, 0.68f, 0.18f, 0.60f}  // warm gold
     };
     titleAmbientBlocks_.reserve(std::size(ambientBlockOffsets));
     for (size_t i = 0; i < std::size(ambientBlockOffsets); ++i) {
@@ -270,6 +300,7 @@ void StageEditor::Finalize() {
     titleAmbientBlocks_.clear();
     titleStartParticles_.clear();
     titlePromptObject_.reset();
+    countdownDigitObjects_.clear();
     titleLetterObjects_.clear();
     playerObject_.reset();
     cursorFrameObject_.reset();
@@ -290,6 +321,7 @@ void StageEditor::Update(Input* input) {
     constexpr float deltaTime = 1.0f / 60.0f;
     if (mode_ == Mode::GamePlay) UpdateGameFlow(input);
     UpdateTitleStartParticles(deltaTime);
+    UpdateGoalPreviewEffect();
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) UpdateRuntimeObjects(deltaTime);
     for (auto& object:tileObjects_) if(object) object->Update();
     for (auto& object:objects_) if(object) object->Update();
@@ -324,7 +356,7 @@ void StageEditor::Update(Input* input) {
                 // 縦方向を主軸にゆっくり漂わせ、横方向は小さく揺らして文字を遮らない。
                 const float transitionProgress = startTransitionActive_
                     ? std::clamp(
-                        startTransitionTimer_ / (kStartTransitionDuration * 0.5f),
+                        startTransitionTimer_ / kStartTransitionBuildDuration,
                         0.0f,
                         1.0f)
                     : 0.0f;
@@ -392,30 +424,45 @@ void StageEditor::Update(Input* input) {
                 const float eased = 1.0f - inverse * inverse * inverse;
                 const float remaining = 1.0f - eased;
                 const float direction = (i % 2 == 0) ? 1.0f : -1.0f;
-                const float gateProgress = startTransitionActive_
-                    ? std::clamp(
-                        startTransitionTimer_ / (kStartTransitionDuration * 0.5f),
-                        0.0f,
-                        1.0f)
-                    : 0.0f;
-                // 決定後は中央に通路を作るよう、左半分と右半分をそれぞれ外側へ開く。
-                const float gateDirection = i < titleLetterObjects_.size() / 2 ? -1.0f : 1.0f;
+                float bounce = 0.0f;
+                float storageProgress = 0.0f;
+                if (startTransitionActive_) {
+                    const float bounceProgress = std::clamp(
+                        startTransitionTimer_ / kTitleBounceDuration, 0.0f, 1.0f);
+                    // 最初にタイトル全体を一度だけ手前へ弾ませ、決定の手応えを作る。
+                    bounce = std::sin(bounceProgress * kPi);
+                    const float storageBegin = kTitleStorageStart +
+                        GetTitleStorageOrder(i, titleLetterObjects_.size()) * kTitleStorageDelay;
+                    storageProgress = std::clamp(
+                        (startTransitionTimer_ - storageBegin) / kTitleStorageDuration,
+                        0.0f, 1.0f);
+                }
+                const float storageEase = storageProgress * storageProgress *
+                    (3.0f - 2.0f * storageProgress);
 
                 letter->SetPosition({
-                    cameraPosition.x + targetOffsets[i] + gateDirection * gateProgress * 4.5f,
-                    cameraPosition.y + 2.2f + direction * remaining * 1.1f +
-                        std::sin(gateProgress * kPi) * 0.6f,
+                    cameraPosition.x + targetOffsets[i],
+                    cameraPosition.y + 2.2f + direction * remaining * 1.1f,
                     // カメラ奥から最終位置へ近づけ、遠近感でも文字を小さく見せる。
-                    cameraPosition.z + 22.0f + remaining * 24.0f - gateProgress * 5.0f
+                    // 決定後は左右端から順に奥へ収納し、壁の材料になる流れを作る。
+                    cameraPosition.z + 22.0f + remaining * 24.0f - bounce * 1.35f +
+                        storageEase * 18.0f
                 });
                 letter->SetRotation({
                     kPi * 0.5f + direction * remaining * kPi * 2.0f,
-                    remaining * kPi * 1.5f + gateDirection * gateProgress * 0.45f,
-                    direction * remaining * kPi + gateDirection * gateProgress * 0.2f
+                    remaining * kPi * 1.5f + storageEase * kPi,
+                    direction * remaining * kPi + direction * storageEase * kPi * 0.35f
                 });
-                // 裏面を見て左右反転しないよう、従来と同じローカルX反転を維持する。
-                const float gateScale = 1.0f + gateProgress * 0.22f;
-                letter->SetScale({-gateScale, gateScale, gateScale});
+                const float storageScale = (1.0f + bounce * 0.12f) *
+                    (1.0f - storageEase * 0.94f);
+                letter->SetScale({-storageScale, storageScale, storageScale});
+                // 青みを含んだ白に統一し、紫の背景から輪郭を浮かせる。
+                // 飛来中だけ少しシアンを強め、整列すると落ち着いた白へ戻す。
+                letter->SetColor({
+                    0.90f+eased*0.08f,
+                    0.96f+eased*0.03f,
+                    1.00f,
+                    1.00f - storageEase});
                 letter->Update();
             }
         }
@@ -449,39 +496,64 @@ void StageEditor::Update(Input* input) {
             );
             const float transitionFade = startTransitionActive_
                 ? 1.0f - std::clamp(
-                    startTransitionTimer_ / (kStartTransitionDuration * 0.28f),
+                    startTransitionTimer_ / (kStartTransitionBuildDuration * 0.56f),
                     0.0f,
                     1.0f)
                 : 1.0f;
             const float alpha = (0.25f + wave * 0.75f) * transitionFade;
-            titlePromptObject_->SetColor({1.0f, 1.0f, 1.0f, alpha});
+            // 入力案内はタイトルより一段鮮やかなシアンにし、視線の優先順位を作る。
+            titlePromptObject_->SetColor({0.30f, 0.90f, 1.0f, alpha});
             titlePromptObject_->Update();
         }
     } else {
         titlePromptBlinkTimer_ = 0.0f;
     }
+
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Countdown &&
+        countdownDigitObjects_.size() >= 3) {
+        const float beatDuration = kStartCountdownDuration / 3.0f;
+        const int beatIndex = (std::min)(2, static_cast<int>(startCountdownTimer_ / beatDuration));
+        const int count = 3 - beatIndex;
+        const float beatProgress = std::fmod(startCountdownTimer_, beatDuration) / beatDuration;
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            const Vector3& cameraPosition = camera->GetTranslate();
+            auto& digit = countdownDigitObjects_[static_cast<size_t>(count - 1)];
+            // 太めのサンセリフ数字を、旧72px文字とGO!の中間程度に揃える。
+            // 拍の頭だけ約22%大きくし、従来のポップ感も維持する。
+            const float popScale = 0.52f * (1.0f + (1.0f - beatProgress) * 0.22f);
+            digit->SetPosition({
+                cameraPosition.x,
+                cameraPosition.y + 0.45f,
+                cameraPosition.z + 21.2f
+            });
+            // Blender生成の数字OBJはX-Y平面が正面で、Z方向が厚み。
+            // タイトル文字用のX軸90度回転を流用すると側面しか見えないため、
+            // 数字は無回転でカメラへ正面を向け、Blenderとエンジンで逆になる
+            // 横方向だけX軸の負スケールで補正する。
+            digit->SetRotation({0.0f, 0.0f, 0.0f});
+            digit->SetScale({-popScale, popScale, popScale});
+            // GO!と同じ淡いミント色にし、カウントから開始までを一続きに見せる。
+            digit->SetColor({0.86f, 1.0f, 0.92f, 1.0f});
+            digit->Update();
+        }
+    }
 }
 
-// 処理概要: 決定入力時にPRESS ENTERの中央から短時間の粒を放射する。
-// 注意事項: タイトルと調和する白・水色・薄紫だけを使い、派手になりすぎない数に抑える。
+// 処理概要: 決定入力時にPRESS ENTERの周囲へ初動パーティクルを生成する。
+// 注意事項: 文字の消滅とは分離し、白・シアン・金色の短い決定演出として扱う。
 void StageEditor::EmitTitleStartParticles() {
     Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
-#ifdef PLAYER_RELEASE
-    // Release版ではタイトル背景と同じブロックを放射し、ゲート形成へ視線を誘導する。
+    // 専用の小型ブロックを使い、決定入力を鮮やかに見せる。
     Model* particleModel = ModelManager::Find(
         "Resources/Title/title_block_particle.obj"
     );
-#else
-    Model* particleModel = ModelManager::Find(
-        "Resources/Editor/ico_sphere.obj"
-    );
-#endif
     if (!camera || !particleModel) {
         return;
     }
 
     titleStartParticles_.clear();
-    constexpr int particleCount = 24;
+    constexpr int promptParticleCount = 24;
     const Vector3& cameraPosition = camera->GetTranslate();
     const Vector3 origin{
         cameraPosition.x,
@@ -489,15 +561,15 @@ void StageEditor::EmitTitleStartParticles() {
         cameraPosition.z + 21.5f
     };
     const Vector4 colors[] = {
-        {0.86f, 0.88f, 0.90f, 1.0f},
-        {0.35f, 0.87f, 0.90f, 1.0f},
-        {0.66f, 0.55f, 0.78f, 1.0f}
+        {0.95f, 0.98f, 1.00f, 1.0f},
+        {0.15f, 0.88f, 1.00f, 1.0f},
+        {1.00f, 0.72f, 0.20f, 1.0f}
     };
 
-    titleStartParticles_.reserve(particleCount);
-    for (int i = 0; i < particleCount; ++i) {
+    titleStartParticles_.reserve(promptParticleCount);
+    for (int i = 0; i < promptParticleCount; ++i) {
         const float angle = (2.0f * kPi * static_cast<float>(i)) /
-            static_cast<float>(particleCount);
+            static_cast<float>(promptParticleCount);
         const float speed = 2.2f + static_cast<float>((i * 7) % 6) * 0.18f;
 
         TitleStartParticle particle{};
@@ -565,6 +637,39 @@ void StageEditor::UpdateTitleStartParticles(float deltaTime) {
             return particle.age >= particle.lifetime;
         }
     );
+}
+
+// 処理概要: ステージ紹介でゴールを映している間、ゴール本体を発光するように強調する。
+// 注意事項: 強調区間外では色・大きさ・ライティングを必ず通常値へ戻す。
+void StageEditor::UpdateGoalPreviewEffect() {
+    const float progress=GetIntroCameraProgress();
+    const bool highlight=
+        mode_==Mode::GamePlay && gameFlowState_==GameFlowState::IntroCamera &&
+        progress>=0.58f && progress<0.70f;
+    const float phase=highlight ? (progress-0.58f)/(0.70f-0.58f) : 0.0f;
+    const float pulse=highlight ? 0.5f+0.5f*std::sin(phase*kPi*4.0f) : 0.0f;
+
+    for(size_t i=0;i<placements_.size() && i<objects_.size();++i){
+        if(placements_[i].itemId!=17 || !objects_[i]) continue;
+        Object3d* goal=objects_[i].get();
+        if(highlight){
+            // ライトの影響を一時的に外して鮮やかな黄色を保ち、わずかな拡縮で発光感を出す。
+            const float scale=1.08f+pulse*0.10f;
+            goal->SetColor({1.0f,1.0f,0.38f,1.0f});
+            goal->SetScale({
+                placements_[i].scale.x*scale,
+                placements_[i].scale.y*scale,
+                placements_[i].scale.z*scale});
+            goal->SetEnableLighting(false);
+            goal->SetEnvironmentCoefficient(0.0f);
+        }else{
+            const ItemDefinition* definition=FindItem(17);
+            if(definition) goal->SetColor(definition->color);
+            goal->SetScale(placements_[i].scale);
+            goal->SetEnableLighting(true);
+            goal->SetEnvironmentCoefficient(environmentCoefficient_);
+        }
+    }
 }
 
 // 処理概要: 更新済みの状態を使用して、担当する表示またはデバッグUIを描画する。
@@ -635,13 +740,27 @@ void StageEditor::Draw3D() {
 
     // ゲーム名はタイトル画面だけに表示し、開始後のプレイ画面には残さない。
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Title) {
-        for (auto& letter : titleLetterObjects_) {
-            if (letter) letter->Draw();
+        for (size_t i = 0; i < titleLetterObjects_.size(); ++i) {
+            auto& letter = titleLetterObjects_[i];
+            const float storageEnd = kTitleStorageStart +
+                GetTitleStorageOrder(i, titleLetterObjects_.size()) * kTitleStorageDelay +
+                kTitleStorageDuration;
+            // 収納完了後の極小モデルを描くと黒い点が残るため、完全に描画を止める。
+            const bool stored = startTransitionActive_ && startTransitionTimer_ >= storageEnd;
+            if (letter && !stored) letter->Draw();
         }
     }
     if (titlePromptObject_ && mode_ == Mode::GamePlay &&
         gameFlowState_ == GameFlowState::Title) {
         titlePromptObject_->Draw();
+    }
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Countdown &&
+        countdownDigitObjects_.size() >= 3) {
+        const float beatDuration = kStartCountdownDuration / 3.0f;
+        const int beatIndex = (std::min)(2, static_cast<int>(startCountdownTimer_ / beatDuration));
+        const int count = 3 - beatIndex;
+        auto& digit = countdownDigitObjects_[static_cast<size_t>(count - 1)];
+        if (digit) digit->Draw();
     }
     for (auto& particle : titleStartParticles_) {
         if (particle.object) {
@@ -819,9 +938,12 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         draw->AddText({x+18,y+52},IM_COL32(255,230,70,255),buffer);
         DrawGridOverlay(x, y, width, height);
     } else if (gameFlowState_ == GameFlowState::Title) {
-        // 3Dタイトルが読める程度に背景だけを落ち着かせる。
+        // 濃紺から赤紫へ薄く色を重ね、天球の階調を残しながら彩度を補強する。
         // 旧仮タイトル文字は、OBJ版「PRISM PASSAGE」と重なるため描画しない。
-        draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(5,10,22,115));
+        draw->AddRectFilledMultiColor(
+            {x,y},{x+width,y+height},
+            IM_COL32(10,20,72,48),IM_COL32(10,20,72,48),
+            IM_COL32(118,35,126,42),IM_COL32(118,35,126,42));
         // Release版は新規ゲームとしてSaveStage.jsonを開始するため、
         // 開発確認用のコンティニュー案内をタイトル画面へ表示しない。
 #ifndef PLAYER_RELEASE
@@ -852,29 +974,89 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             {previewPosition.x+previewSize.x+22.0f,previewPosition.y+previewSize.y+9.0f},
             IM_COL32(4,10,20,190),8.0f);
         draw->AddText(previewPosition,IM_COL32(100,225,255,255),previewText);
-    } else if (gameFlowState_ == GameFlowState::Countdown) {
-        // カメラがスタートへ戻った後、中央に大きな数字を表示する。
-        // 3秒間はプレイヤー・敵・ギミックを停止し、数字が消えてから操作を許可する。
-        const int count=(std::max)(1,3-static_cast<int>(std::floor(startCountdownTimer_)));
-        const std::string countText=std::to_string(count);
-        constexpr float countFontSize=72.0f;
-        const ImVec2 countSize=ImGui::GetFont()->CalcTextSizeA(
-            countFontSize,FLT_MAX,0.0f,countText.c_str());
-        const ImVec2 countPosition{
-            x+(width-countSize.x)*0.5f,
-            y+(height-countSize.y)*0.43f};
-        const ImVec2 circleCenter{
-            countPosition.x+countSize.x*0.5f,
-            countPosition.y+countSize.y*0.5f};
-        draw->AddCircleFilled(circleCenter,62.0f,IM_COL32(4,10,20,205),48);
-        draw->AddCircle(circleCenter,62.0f,IM_COL32(90,225,255,235),48,3.0f);
-        draw->AddText(ImGui::GetFont(),countFontSize,countPosition,IM_COL32_WHITE,countText.c_str());
 
+        if(introCameraSeen_){
+            const char* skipText="ENTER / GAMEPAD A : SKIP";
+            const ImVec2 skipSize=ImGui::CalcTextSize(skipText);
+            draw->AddText(
+                {x+(width-skipSize.x)*0.5f,y+height*0.90f},
+                IM_COL32(205,220,235,205),skipText);
+        }
+
+        const float introProgress=GetIntroCameraProgress();
+        if(introProgress>=0.58f && introProgress<0.70f){
+            // ゴール本体の真上へ矢印を投影し、どのオブジェクトが目的地かを明確にする。
+            const float goalPhase=(introProgress-0.58f)/(0.70f-0.58f);
+            for(const Placement& placement:placements_){
+                if(placement.itemId!=17) continue;
+                Camera* camera=object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+                if(!camera) break;
+                const Vector3 markerPosition{
+                    placement.position.x,
+                    placement.position.y+std::abs(placement.scale.y)*0.65f,
+                    placement.position.z};
+                const Vector4 clip=TransformPoint4(
+                    {markerPosition.x,markerPosition.y,markerPosition.z,1.0f},
+                    camera->GetViewProjectionMatrix());
+                if(clip.w<=0.001f) break;
+                const ImVec2 goalTop{
+                    x+(clip.x/clip.w*0.5f+0.5f)*width,
+                    y+(-clip.y/clip.w*0.5f+0.5f)*height};
+                const float arrowBob=std::sin(goalPhase*kPi*4.0f)*5.0f;
+                const ImVec2 arrowTip{goalTop.x,goalTop.y-12.0f+arrowBob};
+                const ImVec2 arrowLeft{goalTop.x-17.0f,arrowTip.y-25.0f};
+                const ImVec2 arrowRight{goalTop.x+17.0f,arrowTip.y-25.0f};
+                draw->AddTriangleFilled(
+                    arrowTip,arrowLeft,arrowRight,IM_COL32(255,245,145,250));
+                draw->AddLine(
+                    {goalTop.x,arrowTip.y-48.0f},
+                    {goalTop.x,arrowTip.y-20.0f},
+                    IM_COL32(255,245,145,250),8.0f);
+                const char* goalText="GOAL";
+                const ImVec2 goalTextSize=ImGui::CalcTextSize(goalText);
+                draw->AddText(
+                    {goalTop.x-goalTextSize.x*0.5f,arrowTip.y-72.0f},
+                    IM_COL32(255,245,170,255),goalText);
+                break;
+            }
+        }
+    } else if (gameFlowState_ == GameFlowState::Countdown) {
+        // カメラがスタート地点へ戻ってから、落ち着いたテンポで開始を数える。
+        const float beatDuration=kStartCountdownDuration/3.0f;
+        const float beatProgress=std::fmod(startCountdownTimer_,beatDuration)/beatDuration;
+        const ImVec2 circleCenter{
+            x+width*0.5f,
+            y+height*0.43f};
+        const float ringRadius=62.0f+beatProgress*16.0f;
+        // 数字は3Dパスで先に描画されるため、ここで塗りつぶし円を重ねると
+        // OBJ全体が隠れてしまう。輪郭リングだけを重ねて数字を前面に残す。
+        draw->AddCircle(
+            circleCenter,ringRadius,
+            IM_COL32(105,255,190,static_cast<int>((1.0f-beatProgress)*235.0f)),
+            48,3.0f);
         const char* readyText="GET READY";
         const ImVec2 readySize=ImGui::CalcTextSize(readyText);
         draw->AddText(
             {x+(width-readySize.x)*0.5f,circleCenter.y+78.0f},
-            IM_COL32(100,225,255,255),readyText);
+            IM_COL32(170,245,205,255),readyText);
+    } else if (startGoTimer_ > 0.0f) {
+        // 操作可能になった瞬間を、大きな文字と外へ抜けるリングで伝える。
+        const float progress=1.0f-std::clamp(startGoTimer_/kStartGoDuration,0.0f,1.0f);
+        const float eased=progress*progress*(3.0f-2.0f*progress);
+        const float alpha=1.0f-std::clamp((progress-0.58f)/0.42f,0.0f,1.0f);
+        const ImVec2 center{x+width*0.5f,y+height*0.43f};
+        const float ringRadius=62.0f+eased*150.0f;
+        draw->AddCircle(
+            center,ringRadius,
+            IM_COL32(105,255,190,static_cast<int>(alpha*230.0f)),
+            64,4.0f);
+        const float goFontSize=92.0f*(1.18f-0.18f*eased);
+        const char* goText="GO!";
+        const ImVec2 goSize=ImGui::GetFont()->CalcTextSizeA(goFontSize,FLT_MAX,0.0f,goText);
+        draw->AddText(
+            ImGui::GetFont(),goFontSize,
+            {center.x-goSize.x*0.5f,center.y-goSize.y*0.5f},
+            IM_COL32(220,255,235,static_cast<int>(alpha*255.0f)),goText);
     } else if (runtimeMessageTimer_ > 0.0f && !runtimeMessage_.empty()) {
         const ImVec2 textSize = ImGui::CalcTextSize(runtimeMessage_.c_str());
         const ImVec2 textPosition{x + (width - textSize.x) * 0.5f, y + height * 0.18f};
@@ -888,12 +1070,20 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
     // 小型ブロックが画面奥から飛来して一枚の壁を組み上げ、完全に隠れた瞬間に
     // ステージへ切り替える。後半は壁を奥へ崩し、隙間からプレイ画面を公開する。
     if (startTransitionActive_) {
-        constexpr float transitionDuration = kStartTransitionDuration;
-        constexpr float halfDuration = transitionDuration * 0.5f;
-        const bool openingStage = startTransitionTimer_ >= halfDuration;
+        constexpr float buildDuration = kStartTransitionBuildDuration;
+        constexpr float loadingDuration = kStartTransitionLoadingDuration;
+        constexpr float openStart = buildDuration + loadingDuration;
+        const bool loadingStage = startTransitionTimer_ >= buildDuration &&
+            startTransitionTimer_ < openStart;
+        const bool openingStage = startTransitionTimer_ >= openStart;
+        // タイトルが手前へ弾み始めた直後から壁の材料を出し、収納する文字と同期させる。
+        constexpr float wallBuildStart = kTitleStorageStart + 0.04f;
         const float phaseProgress = openingStage
-            ? (startTransitionTimer_ - halfDuration) / halfDuration
-            : startTransitionTimer_ / halfDuration;
+            ? (startTransitionTimer_ - openStart) / kStartTransitionOpenDuration
+            : (loadingStage
+                ? 1.0f
+                : (startTransitionTimer_ - wallBuildStart) /
+                    (buildDuration - wallBuildStart));
         const float clampedPhase = std::clamp(phaseProgress, 0.0f, 1.0f);
         const float easedPhase = clampedPhase * clampedPhase * (3.0f - 2.0f * clampedPhase);
         const float wallProgress = openingStage ? 1.0f - easedPhase : easedPhase;
@@ -906,10 +1096,11 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         const int rowCount = static_cast<int>(std::ceil(height / blockHeight)) + 1;
         const float centerColumn = static_cast<float>(columnCount - 1) * 0.5f;
         const float centerRow = static_cast<float>(rowCount - 1) * 0.5f;
-        const float maximumDistance = std::sqrt(
-            centerColumn * centerColumn + centerRow * centerRow);
+        const float maximumHorizontalDistance = (std::max)(centerColumn, 1.0f);
+        const float maximumVerticalDistance = (std::max)(centerRow, 1.0f);
 
-        // 中央から外側へ組み上がる順番に小さなばらつきを加え、機械的すぎない壁にする。
+        // 左右端から中央へ向かって組み上げる。中央行にも少し遅れを加え、
+        // 最後の中央ブロックが鍵のようにはまって壁が完成する順番にする。
         const auto makeVariation = [](int column, int row) {
             uint32_t value = static_cast<uint32_t>(column) * 73856093u;
             value ^= static_cast<uint32_t>(row) * 19349663u;
@@ -921,15 +1112,17 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
 
         for (int row = 0; row < rowCount; ++row) {
             for (int column = 0; column < columnCount; ++column) {
-                const float distance = std::sqrt(
-                    std::pow(static_cast<float>(column) - centerColumn, 2.0f) +
-                    std::pow(static_cast<float>(row) - centerRow, 2.0f));
-                const float radialOrder = maximumDistance > 0.0f
-                    ? distance / maximumDistance
-                    : 0.0f;
+                const float horizontalDistance = std::abs(
+                    static_cast<float>(column) - centerColumn);
+                const float verticalDistance = std::abs(
+                    static_cast<float>(row) - centerRow);
+                const float inwardOrder = 1.0f - std::clamp(
+                    horizontalDistance / maximumHorizontalDistance, 0.0f, 1.0f);
+                const float centerRowOrder = 1.0f - std::clamp(
+                    verticalDistance / maximumVerticalDistance, 0.0f, 1.0f);
                 const float variation = makeVariation(column, row);
                 const float threshold = std::clamp(
-                    radialOrder * 0.72f + variation * 0.12f,
+                    inwardOrder * 0.68f + centerRowOrder * 0.12f + variation * 0.05f,
                     0.0f,
                     1.0f - buildEdgeWidth);
                 const float blockAmount = std::clamp(
@@ -971,8 +1164,63 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             }
         }
 
+        if (loadingStage) {
+            const float loadingProgress = std::clamp(
+                (startTransitionTimer_ - buildDuration) / loadingDuration,
+                0.0f, 1.0f);
+            constexpr int loadingBlockCount = 8;
+            constexpr float loadingBlockSize = 26.0f;
+            constexpr float loadingBlockGap = 9.0f;
+            const float loadingWidth = loadingBlockCount * loadingBlockSize +
+                (loadingBlockCount - 1) * loadingBlockGap;
+            const float loadingLeft = x + (width - loadingWidth) * 0.5f;
+            const float loadingTop = y + height * 0.5f - loadingBlockSize * 0.5f;
+            const char* loadingText = "LOADING";
+            const ImVec2 loadingTextSize = ImGui::CalcTextSize(loadingText);
+            draw->AddText(
+                {x + (width - loadingTextSize.x) * 0.5f, loadingTop - 38.0f},
+                IM_COL32(205, 230, 244, 235), loadingText);
+            const int illuminatedCount = (std::min)(
+                loadingBlockCount,
+                static_cast<int>(loadingProgress * static_cast<float>(loadingBlockCount + 1)));
+            const float completionFlash = std::clamp(
+                (loadingProgress - 0.90f) / 0.10f, 0.0f, 1.0f);
+            const float flashPulse = completionFlash > 0.0f
+                ? std::sin(completionFlash * kPi)
+                : 0.0f;
+
+            for (int index = 0; index < loadingBlockCount; ++index) {
+                const float left = loadingLeft +
+                    static_cast<float>(index) * (loadingBlockSize + loadingBlockGap);
+                const ImVec2 minimum{left, loadingTop};
+                const ImVec2 maximum{left + loadingBlockSize, loadingTop + loadingBlockSize};
+                const bool illuminated = index < illuminatedCount;
+                ImU32 faceColor = IM_COL32(30, 38, 58, 255);
+                ImU32 edgeColor = IM_COL32(65, 78, 104, 255);
+                if (illuminated) {
+                    const bool finalBlock = index == loadingBlockCount - 1;
+                    faceColor = finalBlock
+                        ? IM_COL32(255, 181, 48, 255)
+                        : IM_COL32(38, 211, 245, 255);
+                    edgeColor = finalBlock
+                        ? IM_COL32(255, 235, 160, 255)
+                        : IM_COL32(190, 250, 255, 255);
+                }
+                if (flashPulse > 0.0f) {
+                    const int white = static_cast<int>(flashPulse * 185.0f);
+                    faceColor = IM_COL32(
+                        (std::min)(255, static_cast<int>((faceColor >> IM_COL32_R_SHIFT) & 0xff) + white),
+                        (std::min)(255, static_cast<int>((faceColor >> IM_COL32_G_SHIFT) & 0xff) + white),
+                        (std::min)(255, static_cast<int>((faceColor >> IM_COL32_B_SHIFT) & 0xff) + white),
+                        255);
+                }
+                draw->AddRectFilled(minimum, maximum, faceColor, 4.0f);
+                draw->AddRect(minimum, maximum, edgeColor, 4.0f, 0, 2.0f);
+            }
+        }
+
         // ステージ切替フレームだけは継ぎ目も完全に隠し、切替前後の画像混入を防ぐ。
-        if (std::abs(startTransitionTimer_ - halfDuration) < 0.035f) {
+        if (std::abs(startTransitionTimer_ - openStart) < 0.035f) {
             draw->AddRectFilled({x, y}, {x + width, y + height}, IM_COL32(8, 12, 24, 255));
         }
         draw->PopClipRect();
@@ -1164,19 +1412,22 @@ void StageEditor::UpdateGameFlow(Input* input) {
     if (!input) return;
     constexpr float deltaTime = 1.0f / 60.0f;
     constexpr float startTransitionDuration = kStartTransitionDuration;
-    constexpr float startTransitionSwitchTime = startTransitionDuration * 0.5f;
-    // 最長のタイトル粒子（約0.83秒）が消えてからフェードを開始する。
-    constexpr float titleStartEffectDuration = 0.85f;
+    // 壁が完成してロードブロックが全点灯した瞬間にステージへ切り替える。
+    constexpr float startTransitionSwitchTime =
+        kStartTransitionBuildDuration + kStartTransitionLoadingDuration;
+    startGoTimer_=(std::max)(0.0f,startGoTimer_-deltaTime);
 
-    if (titleStartEffectPending_) {
-        titleStartEffectTimer_ += deltaTime;
-        if (titleStartEffectTimer_ >= titleStartEffectDuration) {
-            titleStartEffectPending_ = false;
-            titleStartEffectTimer_ = 0.0f;
-            startTransitionActive_ = true;
-            startTransitionContinue_ = false;
-        }
-        // 演出待機中は追加の決定入力を受け付けず、フェードも進めない。
+    // プレイ中・導入演出中・画面遷移中のどこからでもEscでタイトルへ戻す。
+    // タイトル画面上ではEscを消費せず、既存のウィンドウ操作へ影響させない。
+    if (gameFlowState_ != GameFlowState::Title && input->TriggerKey(DIK_ESCAPE)) {
+        ResetRuntimeState();
+        gameFlowState_ = GameFlowState::Title;
+        titleLetterAnimationTimer_ = 0.0f;
+        titlePromptBlinkTimer_ = 0.0f;
+        titleAmbientBlockTimer_ = 0.0f;
+        titleStartParticles_.clear();
+        RefreshSaveDataAvailability();
+        status_ = "Returned to title";
         return;
     }
 
@@ -1203,13 +1454,24 @@ void StageEditor::UpdateGameFlow(Input* input) {
     }
 
     if (gameFlowState_ == GameFlowState::IntroCamera) {
+        const bool skipIntro=introCameraSeen_ && (
+            input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_A));
+        if(skipIntro){
+            // 初回閲覧後は全景紹介だけを省略し、開始タイミングを示す短いカウントへ移る。
+            gameFlowState_=GameFlowState::Countdown;
+            startCountdownTimer_=0.0f;
+            return;
+        }
+
         // 演出中はUpdatePlayer/UpdateRuntimeObjectsが呼ばれないため、
         // 自機・敵・ギミックを停止したままカメラだけを進められる。
         introCameraTimer_ = (std::min)(kIntroCameraDuration,introCameraTimer_+deltaTime);
         if (introCameraTimer_ >= kIntroCameraDuration) {
-            // カメラがスタート地点へ戻ってから3カウントへ移る。
-            gameFlowState_ = GameFlowState::Countdown;
-            startCountdownTimer_ = 0.0f;
+            // スタート地点へ完全に戻った後、独立した3カウントへ進む。
+            introCameraSeen_=true;
+            gameFlowState_=GameFlowState::Countdown;
+            startCountdownTimer_=0.0f;
         }
         return;
     }
@@ -1218,7 +1480,7 @@ void StageEditor::UpdateGameFlow(Input* input) {
         startCountdownTimer_=(std::min)(kStartCountdownDuration,startCountdownTimer_+deltaTime);
         if (startCountdownTimer_>=kStartCountdownDuration) {
             gameFlowState_=GameFlowState::Playing;
-            ShowRuntimeMessage("GO!",1.0f);
+            startGoTimer_=kStartGoDuration;
         }
         return;
     }
@@ -1236,15 +1498,15 @@ void StageEditor::UpdateGameFlow(Input* input) {
             if (LoadSavedProgress()) {
                 startTransitionActive_ = true;
                 startTransitionContinue_ = true;
+                suppressStartJumpUntilReleased_ = true;
             }
         } else if (accept) {
             ResetRuntimeState();
             EmitTitleStartParticles();
-            // 先に粒子だけを再生し、完了後に上部の待機処理からフェードへ接続する。
-            titleStartEffectPending_ = true;
-            titleStartEffectTimer_ = 0.0f;
-            startTransitionActive_ = false;
+            // 決定パーティクルと同時に、タイトルを中央から左右へ開く遷移を開始する。
+            startTransitionActive_ = true;
             startTransitionContinue_ = false;
+            suppressStartJumpUntilReleased_ = true;
         }
     } else if (gameFlowState_ == GameFlowState::Clear) {
         // クリア結果を確認できる時間を確保した後、自動でタイトルへ戻す。
@@ -1274,10 +1536,10 @@ void StageEditor::ResetRuntimeState() {
     startTransitionTimer_ = 0.0f;
     startTransitionActive_ = false;
     startTransitionContinue_ = false;
-    titleStartEffectTimer_ = 0.0f;
-    titleStartEffectPending_ = false;
     introCameraTimer_ = 0.0f;
     startCountdownTimer_ = 0.0f;
+    startGoTimer_ = 0.0f;
+    suppressStartJumpUntilReleased_ = false;
     playerFlashTimer_ = 0.0f;
     playerDamageCooldown_ = 0.0f;
     runtimeMessage_.clear();
@@ -2001,8 +2263,18 @@ void StageEditor::UpdatePlayer(Input* input) {
         if (input->PushKey(DIK_S) || input->PushKey(DIK_DOWN)) climbInput -= 1.0f;
         const float stickY = input->GetLeftStickY();
         if (std::abs(stickY) > std::abs(climbInput)) climbInput = stickY;
-        jumpTriggered = input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE) ||
-            input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+        if (suppressStartJumpUntilReleased_) {
+            const bool startInputHeld = input->PushKey(DIK_RETURN) ||
+                input->PushKey(DIK_SPACE) ||
+                input->PushGamepadButton(XINPUT_GAMEPAD_A);
+            // プレイ開始後に全決定ボタンが一度離されるまでは、タイトル画面での
+            // 連打をジャンプとして扱わない。離した次の新規入力から通常操作へ戻す。
+            if (!startInputHeld) suppressStartJumpUntilReleased_ = false;
+            jumpTriggered = false;
+        } else {
+            jumpTriggered = input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE) ||
+                input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+        }
     }
 
     if (goalReached_) {

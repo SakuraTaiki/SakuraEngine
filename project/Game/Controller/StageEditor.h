@@ -142,6 +142,7 @@ private:
     void UpdateGameFlow(Input* input);
     void EmitTitleStartParticles();
     void UpdateTitleStartParticles(float deltaTime);
+    void UpdateGoalPreviewEffect();
     void UpdateRuntimeObjects(float deltaTime);
     void UpdateEnemies(float deltaTime);
     void UpdateGimmickCollisions(Input* input, float deltaTime);
@@ -219,6 +220,8 @@ private:
     float titleLetterAnimationTimer_ = 0.0f;
     // ゲーム名の下で点滅する「PRESS ENTER」の3Dブロック文字。
     std::unique_ptr<Object3d> titlePromptObject_;
+    // 開始カウント用の立体ブロック数字。添字0から「1」「2」「3」の順で保持する。
+    std::vector<std::unique_ptr<Object3d>> countdownDigitObjects_;
     std::vector<TitleStartParticle> titleStartParticles_;
     std::vector<TitleAmbientBlock> titleAmbientBlocks_;
     float titleAmbientBlockTimer_ = 0.0f;
@@ -256,17 +259,26 @@ private:
     float startTransitionTimer_ = 0.0f;
     bool startTransitionActive_ = false;
     bool startTransitionContinue_ = false;
-    // ブロック壁が完成し、中央の暗転を挟んでステージ側へ崩れるまでの総時間。
-    static constexpr float kStartTransitionDuration = 2.4f;
-    // Enter押下パーティクルを最後まで見せてからフェードを開始するための待機状態。
-    float titleStartEffectTimer_ = 0.0f;
-    bool titleStartEffectPending_ = false;
+    // ブロック壁の構築、ロード表示、ステージ側への開放を独立した区間で管理する。
+    static constexpr float kStartTransitionBuildDuration = 1.2f;
+    static constexpr float kStartTransitionLoadingDuration = 0.8f;
+    static constexpr float kStartTransitionOpenDuration = 1.2f;
+    static constexpr float kStartTransitionDuration =
+        kStartTransitionBuildDuration + kStartTransitionLoadingDuration +
+        kStartTransitionOpenDuration;
     // スタートからゴールを紹介して戻るカメラ演出の経過時間。
     float introCameraTimer_ = 0.0f;
     static constexpr float kIntroCameraDuration = 5.0f;
-    // ステージ紹介後、操作開始前に表示する3カウントの経過時間。
+    // 起動後の初回だけは紹介を必須にし、以降は入力で短縮できるようにする。
+    bool introCameraSeen_ = false;
+    // スタート地点へ帰還した後に開始する3カウントの経過時間。
     float startCountdownTimer_ = 0.0f;
     static constexpr float kStartCountdownDuration = 3.0f;
+    // 操作開始と同時に大きく表示し、外向きのリングとともに消えるGO演出。
+    float startGoTimer_ = 0.0f;
+    static constexpr float kStartGoDuration = 0.75f;
+    // タイトル決定に使った入力がプレイ開始時のジャンプへ持ち越されるのを防ぐ。
+    bool suppressStartJumpUntilReleased_ = false;
     std::string runtimeMessage_;
     int collectedStars_ = 0;
     int collectedBubbles_ = 0;

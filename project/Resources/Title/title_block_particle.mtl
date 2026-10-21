@@ -1,10 +1,11 @@
 newmtl TitleBlockParticleMaterial
 Ns 24.0
 Ka 1.0 1.0 1.0
-Kd 0.88 0.90 0.94
-Ks 0.12 0.12 0.12
+Kd 1.0 1.0 1.0
+Ks 0.0 0.0 0.0
 Ke 0.0 0.0 0.0
 Ni 1.5
 d 1.0
 illum 2
-map_Kd prism_passage_title.png
+# Use the engine's plain white fallback texture. The title texture contains
+# dark letter outlines, which made the small colored blocks appear black.
