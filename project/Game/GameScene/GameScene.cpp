@@ -165,7 +165,8 @@ void GameScene::InitializeSkyDome() {
     skyDome_->SetScale({ 80.0f, 80.0f, 80.0f });
     skyDome_->SetEnableLighting(false);
     skyDome_->SetEnvironmentCoefficient(0.0f);
-    skyDome_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+    // 青紫をわずかに強め、タイトル画面では鮮やかさを保ちながら白文字を読みやすくする。
+    skyDome_->SetColor({ 0.94f, 0.92f, 1.0f, 1.0f });
 }
 
 
@@ -377,21 +378,21 @@ void GameScene::UpdateSideScrollCamera() {
 
         float cinematicX=startX;
         float cinematicArc=0.0f;
-        if(progress<0.12f){
+        if(progress<0.10f){
             // 最初にスタート地点を短く見せ、プレイヤーの位置を把握させる。
             cinematicX=startX;
-        }else if(progress<0.65f){
+        }else if(progress<0.58f){
             // メインのパン。中間では少し上昇・ズームアウトしてステージを広く見せる。
-            const float travel=(progress-0.12f)/(0.65f-0.12f);
+            const float travel=(progress-0.10f)/(0.58f-0.10f);
             const float eased=smootherStep(travel);
             cinematicX=startX+(goalX-startX)*eased;
             cinematicArc=std::sin(travel*3.14159265358979323846f);
-        }else if(progress<0.76f){
+        }else if(progress<0.70f){
             // ゴール地点を一呼吸映して、進む方向と目的を印象付ける。
             cinematicX=goalX;
         }else{
-            // 操作開始時にカメラが飛ばないよう、短く滑らかにスタートへ戻す。
-            const float returning=(progress-0.76f)/(1.0f-0.76f);
+            // ゴール強調が終わった後、カウント開始前にスタート地点へ戻す。
+            const float returning=(progress-0.70f)/(1.0f-0.70f);
             const float eased=smootherStep(returning);
             cinematicX=goalX+(startX-goalX)*eased;
             cinematicArc=0.55f*std::sin(returning*3.14159265358979323846f);
