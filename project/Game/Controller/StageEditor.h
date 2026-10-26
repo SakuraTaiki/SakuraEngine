@@ -24,7 +24,7 @@ public:
     static constexpr float kTileWorldSize = 1.0f;
 
     enum class Mode { Editor, GamePlay };
-    enum class GameFlowState { Title, IntroCamera, Countdown, Playing, Clear };
+    enum class GameFlowState { Title, IntroCamera, Countdown, Playing, Clear, GameOver };
     enum class Category { Basic, Gimmick, Enemy, System };
     enum class TileCollisionType { Empty, Solid, OneWay, Ladder, SlopeUpRight, SlopeUpLeft };
 
@@ -35,7 +35,12 @@ public:
         const char* modelDirectory = "";
         const char* modelFile = "";
         Vector4 color{1,1,1,1};
+        // defaultScaleはステージ上の論理サイズ。モデル固有の見た目補正とは分離する。
         Vector3 defaultScale{1,1,1};
+        Vector3 modelOffset{};
+        Vector3 modelRotation{};
+        Vector3 modelScale{1,1,1};
+        Vector3 colliderScale{1,1,1};
     };
 
     struct Placement {
@@ -104,6 +109,15 @@ private:
         float scale = 1.0f;
     };
 
+    // ミス時にプレイヤーを分解・再構築して見せる小型ブロック。
+    struct RespawnEffectBlock {
+        std::unique_ptr<Object3d> object;
+        Vector3 direction{};
+        Vector3 assemblyOffset{};
+        Vector4 color{1.0f, 1.0f, 1.0f, 1.0f};
+        float rotationSpeed = 1.0f;
+    };
+
     struct Snapshot {
         std::vector<int> tiles;
         std::vector<Placement> placements;
@@ -138,9 +152,13 @@ private:
     void ResetPlayer();
     void ResetRuntimeState();
     void RespawnPlayer(bool damaged = false);
+    void BeginRespawnEffect(bool fellOutOfStage);
+    void UpdateRespawnEffect(float deltaTime);
+    void ChangePlayerLives(int amount);
     void UpdatePlayer(Input* input);
     void UpdateGameFlow(Input* input);
     void EmitTitleStartParticles();
+    void EmitCountdownImpactParticles(int count);
     void UpdateTitleStartParticles(float deltaTime);
     void UpdateGoalPreviewEffect();
     void UpdateRuntimeObjects(float deltaTime);
@@ -169,6 +187,16 @@ private:
     const ItemDefinition* FindItem(int id) const;
 
     std::unique_ptr<Object3d> CreateObject(const Placement& placement) const;
+    Vector3 GetPlacementModelPosition(
+        const Placement& placement,
+        const Vector3& logicalPosition) const;
+    Vector3 GetPlacementModelRotation(const Placement& placement) const;
+    Vector3 GetPlacementModelScale(const Placement& placement) const;
+    Vector3 GetPlacementHalfExtents(const Placement& placement) const;
+    void ApplyPlacementVisualTransform(
+        Object3d* object,
+        const Placement& placement,
+        const Vector3& logicalPosition) const;
     void RebuildObjects();
     void UpdateCursorObject();
 
@@ -225,6 +253,13 @@ private:
     std::vector<TitleStartParticle> titleStartParticles_;
     std::vector<TitleAmbientBlock> titleAmbientBlocks_;
     float titleAmbientBlockTimer_ = 0.0f;
+    std::vector<RespawnEffectBlock> respawnEffectBlocks_;
+    bool respawnEffectActive_ = false;
+    bool respawnEffectFromFall_ = false;
+    float respawnEffectTimer_ = 0.0f;
+    Vector3 respawnEffectOrigin_{};
+    // 分解側と再構築側をそれぞれ約1秒長く見せる。
+    static constexpr float kRespawnEffectDuration = 3.05f;
 
     Vector3 playerPosition_{1.5f, 2.5f, 0.0f};
     Vector3 playerVelocity_{};
@@ -255,6 +290,12 @@ private:
     float doorCooldown_ = 0.0f;
     // ゴール後にクリア画面を表示してから、タイトルへ自動遷移するまでの残り時間。
     float clearReturnTimer_ = 0.0f;
+    // 最後の残機を失った後の専用画面と入力解禁タイミングを管理する。
+    float gameOverTimer_ = 0.0f;
+    bool gameOverExitActive_ = false;
+    float gameOverExitTimer_ = 0.0f;
+    static constexpr float kGameOverInputDelay = 1.75f;
+    static constexpr float kGameOverExitDuration = 0.72f;
     // タイトルからゲームへ移る際のフェード演出を管理する。
     float startTransitionTimer_ = 0.0f;
     bool startTransitionActive_ = false;
@@ -274,11 +315,20 @@ private:
     // スタート地点へ帰還した後に開始する3カウントの経過時間。
     float startCountdownTimer_ = 0.0f;
     static constexpr float kStartCountdownDuration = 3.0f;
+    int countdownImpactBeat_ = -1;
+    bool countdownImpactEmitted_ = false;
     // 操作開始と同時に大きく表示し、外向きのリングとともに消えるGO演出。
     float startGoTimer_ = 0.0f;
     static constexpr float kStartGoDuration = 0.75f;
     // タイトル決定に使った入力がプレイ開始時のジャンプへ持ち越されるのを防ぐ。
     bool suppressStartJumpUntilReleased_ = false;
+    // 右上HUDへ表示する残機。変化量と対象スロットを保持して増減を短く強調する。
+    static constexpr int kMaxPlayerLives = 3;
+    int playerLives_ = kMaxPlayerLives;
+    int lifeChangeAmount_ = 0;
+    int lifeChangedSlot_ = -1;
+    float lifeChangeTimer_ = 0.0f;
+    static constexpr float kLifeChangeDuration = 0.9f;
     std::string runtimeMessage_;
     int collectedStars_ = 0;
     int collectedBubbles_ = 0;
