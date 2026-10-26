@@ -222,6 +222,39 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
         "Resources/Title",
         "title_block_particle.obj"
     );
+    constexpr Vector3 respawnDirections[] = {
+        {-0.95f, 0.75f, 0.10f}, {-0.55f, 1.00f, -0.08f},
+        {-0.15f, 0.82f, 0.12f}, {0.25f, 1.05f, -0.10f},
+        {0.65f, 0.88f, 0.08f}, {0.98f, 0.62f, -0.12f},
+        {-0.82f, 0.25f, -0.06f}, {-0.35f, 0.38f, 0.10f},
+        {0.42f, 0.30f, -0.08f}, {0.84f, 0.18f, 0.06f}
+    };
+    constexpr Vector3 assemblyOffsets[] = {
+        {-0.24f, 0.24f, 0.0f}, {0.0f, 0.24f, 0.0f}, {0.24f, 0.24f, 0.0f},
+        {-0.24f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.24f, 0.0f, 0.0f},
+        {-0.24f, -0.24f, 0.0f}, {0.0f, -0.24f, 0.0f}, {0.24f, -0.24f, 0.0f},
+        {0.0f, 0.48f, 0.0f}
+    };
+    constexpr Vector4 respawnColors[] = {
+        {0.62f, 0.30f, 1.0f, 1.0f},
+        {0.12f, 0.88f, 1.0f, 1.0f},
+        {0.95f, 0.98f, 1.0f, 1.0f}
+    };
+    respawnEffectBlocks_.reserve(std::size(respawnDirections));
+    for (size_t i = 0; i < std::size(respawnDirections); ++i) {
+        RespawnEffectBlock block{};
+        block.object = std::make_unique<Object3d>();
+        block.object->Initialize(object3dCommon_);
+        block.object->SetModel(titleAmbientBlockModel);
+        block.object->SetEnableLighting(false);
+        block.object->SetEnvironmentTexture(environmentTexture_);
+        block.object->SetEnvironmentCoefficient(0.0f);
+        block.direction = respawnDirections[i];
+        block.assemblyOffset = assemblyOffsets[i];
+        block.color = respawnColors[i % std::size(respawnColors)];
+        block.rotationSpeed = 2.8f + static_cast<float>(i % 5) * 0.55f;
+        respawnEffectBlocks_.push_back(std::move(block));
+    }
 #ifndef PLAYER_RELEASE
     (void)titleAmbientBlockModel;
 #endif
@@ -298,6 +331,7 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
 // 注意事項: 再初期化やアプリ終了時に参照を残さない。
 void StageEditor::Finalize() {
     titleAmbientBlocks_.clear();
+    respawnEffectBlocks_.clear();
     titleStartParticles_.clear();
     titlePromptObject_.reset();
     countdownDigitObjects_.clear();
@@ -319,19 +353,24 @@ void StageEditor::Update(Input* input) {
     }
 
     constexpr float deltaTime = 1.0f / 60.0f;
+    lifeChangeTimer_ = (std::max)(0.0f, lifeChangeTimer_ - deltaTime);
     if (mode_ == Mode::GamePlay) UpdateGameFlow(input);
     UpdateTitleStartParticles(deltaTime);
     UpdateGoalPreviewEffect();
-    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) UpdateRuntimeObjects(deltaTime);
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing &&
+        !respawnEffectActive_) UpdateRuntimeObjects(deltaTime);
     for (auto& object:tileObjects_) if(object) object->Update();
     for (auto& object:objects_) if(object) object->Update();
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) {
         UpdatePlayer(input);
     }
     if(cursorObject_ && mode_==Mode::Editor) {
-        cursorObject_->SetPosition(cursorPosition_);
-        cursorObject_->SetRotation(cursorRotation_);
-        cursorObject_->SetScale(cursorScale_);
+        Placement preview{};
+        preview.itemId = selectedItemId_;
+        preview.position = cursorPosition_;
+        preview.rotation = cursorRotation_;
+        preview.scale = cursorScale_;
+        ApplyPlacementVisualTransform(cursorObject_.get(), preview, cursorPosition_);
         cursorObject_->Update();
     }
     if(cursorFrameObject_ && mode_==Mode::Editor){
@@ -515,26 +554,81 @@ void StageEditor::Update(Input* input) {
         const int beatIndex = (std::min)(2, static_cast<int>(startCountdownTimer_ / beatDuration));
         const int count = 3 - beatIndex;
         const float beatProgress = std::fmod(startCountdownTimer_, beatDuration) / beatDuration;
+        if (countdownImpactBeat_ != beatIndex) {
+            countdownImpactBeat_ = beatIndex;
+            countdownImpactEmitted_ = false;
+        }
         Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
         if (camera) {
             const Vector3& cameraPosition = camera->GetTranslate();
             auto& digit = countdownDigitObjects_[static_cast<size_t>(count - 1)];
-            // 太めのサンセリフ数字を、旧72px文字とGO!の中間程度に揃える。
-            // 拍の頭だけ約22%大きくし、従来のポップ感も維持する。
-            const float popScale = 0.52f * (1.0f + (1.0f - beatProgress) * 0.22f);
+
+            // 1拍を「奥から接近 → 着地 → 静止 → 奥へ収納」に分ける。
+            constexpr float arrivalEnd = 0.28f;
+            constexpr float impactEnd = 0.50f;
+            constexpr float exitStart = 0.78f;
+            const auto smoothStep = [](float value) {
+                const float t = std::clamp(value, 0.0f, 1.0f);
+                return t * t * (3.0f - 2.0f * t);
+            };
+
+            float scaleX = 0.52f;
+            float scaleY = 0.52f;
+            float scaleZ = 0.52f;
+            float depthOffset = 0.0f;
+            float rotationY = 0.0f;
+            float rotationZ = 0.0f;
+            Vector4 digitColor{0.86f, 1.0f, 0.92f, 1.0f};
+
+            if (beatProgress < arrivalEnd) {
+                const float progress = smoothStep(beatProgress / arrivalEnd);
+                const float approachScale = 0.16f + 0.42f * progress;
+                scaleX = approachScale;
+                scaleY = approachScale;
+                scaleZ = approachScale;
+                depthOffset = 5.5f * (1.0f - progress);
+                rotationY = (1.0f - progress) * kPi * 2.0f;
+                rotationZ = (1.0f - progress) * kPi * 0.22f;
+                digitColor = {0.76f, 0.88f, 1.0f, 0.72f + progress * 0.28f};
+            } else if (beatProgress < impactEnd) {
+                const float progress = (beatProgress - arrivalEnd) / (impactEnd - arrivalEnd);
+                const float bounce = std::sin(progress * kPi) * (1.0f - progress);
+                // 着地直後だけ横へ広がり、縦へ潰れてから元の形へ戻す。
+                scaleX = 0.52f + bounce * 0.13f;
+                scaleY = 0.52f - bounce * 0.11f;
+                scaleZ = 0.52f + bounce * 0.05f;
+                digitColor = count == 1
+                    ? Vector4{1.0f, 0.73f + progress * 0.16f, 0.20f, 1.0f}
+                    : Vector4{0.18f + progress * 0.68f, 0.92f, 1.0f, 1.0f};
+                if (!countdownImpactEmitted_) {
+                    EmitCountdownImpactParticles(count);
+                    countdownImpactEmitted_ = true;
+                }
+            } else if (beatProgress >= exitStart) {
+                const float progress = smoothStep(
+                    (beatProgress - exitStart) / (1.0f - exitStart));
+                const float shrink = 1.0f - progress;
+                scaleX = 0.52f * shrink;
+                scaleY = 0.52f * shrink;
+                scaleZ = 0.52f * shrink;
+                depthOffset = 4.5f * progress;
+                rotationY = progress * kPi * 1.2f;
+                rotationZ = -progress * kPi * 0.16f;
+                digitColor.w = 1.0f - progress;
+            }
+
             digit->SetPosition({
                 cameraPosition.x,
                 cameraPosition.y + 0.45f,
-                cameraPosition.z + 21.2f
+                cameraPosition.z + 21.2f + depthOffset
             });
             // Blender生成の数字OBJはX-Y平面が正面で、Z方向が厚み。
             // タイトル文字用のX軸90度回転を流用すると側面しか見えないため、
             // 数字は無回転でカメラへ正面を向け、Blenderとエンジンで逆になる
             // 横方向だけX軸の負スケールで補正する。
-            digit->SetRotation({0.0f, 0.0f, 0.0f});
-            digit->SetScale({-popScale, popScale, popScale});
-            // GO!と同じ淡いミント色にし、カウントから開始までを一続きに見せる。
-            digit->SetColor({0.86f, 1.0f, 0.92f, 1.0f});
+            digit->SetRotation({0.0f, rotationY, rotationZ});
+            digit->SetScale({-scaleX, scaleY, scaleZ});
+            digit->SetColor(digitColor);
             digit->Update();
         }
     }
@@ -601,6 +695,60 @@ void StageEditor::EmitTitleStartParticles() {
     }
 }
 
+// 処理概要: カウント数字が着地した瞬間、周囲へ小型ブロックを飛散させる。
+// 注意事項: 1拍につき一度だけ呼び出し、1のときだけ金色を強めてGOへつなげる。
+void StageEditor::EmitCountdownImpactParticles(int count) {
+    Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+    Model* particleModel = ModelManager::Find(
+        "Resources/Title/title_block_particle.obj"
+    );
+    if (!camera || !particleModel) return;
+
+    constexpr int particleCount = 6;
+    const Vector3& cameraPosition = camera->GetTranslate();
+    const Vector3 origin{
+        cameraPosition.x,
+        cameraPosition.y + 0.45f,
+        cameraPosition.z + 21.0f
+    };
+
+    for (int i = 0; i < particleCount; ++i) {
+        const float angle = (2.0f * kPi * static_cast<float>(i)) /
+            static_cast<float>(particleCount) + kPi * 0.08f;
+        TitleStartParticle particle{};
+        particle.object = std::make_unique<Object3d>();
+        particle.object->Initialize(object3dCommon_);
+        particle.object->SetModel(particleModel);
+        particle.object->SetEnableLighting(false);
+        particle.object->SetEnvironmentTexture(environmentTexture_);
+        particle.object->SetEnvironmentCoefficient(0.0f);
+        particle.position = origin;
+        particle.velocity = {
+            std::cos(angle) * (1.35f + static_cast<float>(i % 2) * 0.25f),
+            std::sin(angle) * 1.05f + 0.18f,
+            -0.08f - static_cast<float>(i % 3) * 0.035f
+        };
+        if (count == 1) {
+            particle.color = i % 2 == 0
+                ? Vector4{1.0f, 0.70f, 0.16f, 1.0f}
+                : Vector4{1.0f, 0.94f, 0.66f, 1.0f};
+        } else {
+            particle.color = i % 2 == 0
+                ? Vector4{0.12f, 0.88f, 1.0f, 1.0f}
+                : Vector4{0.90f, 0.98f, 1.0f, 1.0f};
+        }
+        particle.lifetime = 0.42f + static_cast<float>(i % 3) * 0.04f;
+        particle.baseScale = 0.065f + static_cast<float>(i % 2) * 0.018f;
+        particle.rotationSpeed = 4.2f + static_cast<float>(i) * 0.45f;
+        particle.object->SetPosition(particle.position);
+        particle.object->SetScale({
+            particle.baseScale, particle.baseScale, particle.baseScale});
+        particle.object->SetColor(particle.color);
+        particle.object->Update();
+        titleStartParticles_.push_back(std::move(particle));
+    }
+}
+
 // 処理概要: 放射したタイトル粒子を広げながら縮小・消滅させる。
 // 注意事項: ゲーム状態がタイトルから切り替わっても、寿命までは更新して自然に消す。
 void StageEditor::UpdateTitleStartParticles(float deltaTime) {
@@ -652,20 +800,21 @@ void StageEditor::UpdateGoalPreviewEffect() {
     for(size_t i=0;i<placements_.size() && i<objects_.size();++i){
         if(placements_[i].itemId!=17 || !objects_[i]) continue;
         Object3d* goal=objects_[i].get();
+        const Vector3 visualScale = GetPlacementModelScale(placements_[i]);
         if(highlight){
             // ライトの影響を一時的に外して鮮やかな黄色を保ち、わずかな拡縮で発光感を出す。
             const float scale=1.08f+pulse*0.10f;
             goal->SetColor({1.0f,1.0f,0.38f,1.0f});
             goal->SetScale({
-                placements_[i].scale.x*scale,
-                placements_[i].scale.y*scale,
-                placements_[i].scale.z*scale});
+                visualScale.x*scale,
+                visualScale.y*scale,
+                visualScale.z*scale});
             goal->SetEnableLighting(false);
             goal->SetEnvironmentCoefficient(0.0f);
         }else{
             const ItemDefinition* definition=FindItem(17);
             if(definition) goal->SetColor(definition->color);
-            goal->SetScale(placements_[i].scale);
+            goal->SetScale(visualScale);
             goal->SetEnableLighting(true);
             goal->SetEnvironmentCoefficient(environmentCoefficient_);
         }
@@ -703,8 +852,14 @@ void StageEditor::Draw3D() {
             if (objects_[i]) objects_[i]->Draw();
         }
 
-        if (playerObject_ && mode_ == Mode::GamePlay) {
+        if (playerObject_ && mode_ == Mode::GamePlay && !respawnEffectActive_ &&
+            gameFlowState_ != GameFlowState::GameOver) {
             playerObject_->Draw();
+        }
+        if (mode_ == Mode::GamePlay && respawnEffectActive_) {
+            for (auto& block : respawnEffectBlocks_) {
+                if (block.object) block.object->Draw();
+            }
         }
     }
     // 配置済みの実体と半透明プレビューを同じ座標へ描画すると、
@@ -889,7 +1044,8 @@ void StageEditor::DrawTransformPanel() {
     ImGui::Checkbox("Show 16x16 grid", &showGrid_);
     if (!IsTileItem(selectedItemId_)) {
         ImGui::DragFloat3("Object Rotation",&cursorRotation_.x,0.01f);
-        ImGui::DragFloat3("Object Scale",&cursorScale_.x,0.02f,0.02f,100.0f);
+        ImGui::DragFloat3("Logical Size / Collider",&cursorScale_.x,0.02f,0.02f,100.0f);
+        ImGui::TextDisabled("Model correction is defined per item, not per stage object.");
     }
     ImGui::TextDisabled("Left click/drag: place   Right click/drag: erase");
     ImGui::TextDisabled("WASD: move cursor   Enter: place   Ctrl+Z/Y: history");
@@ -964,6 +1120,124 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             {x+(width-returningSize.x)*0.5f,y+height*0.50f},
             IM_COL32_WHITE,
             returning);
+    } else if (gameFlowState_ == GameFlowState::GameOver) {
+        const auto smoothStep=[](float value){
+            const float t=std::clamp(value,0.0f,1.0f);
+            return t*t*(3.0f-2.0f*t);
+        };
+        const float exitProgress=gameOverExitActive_
+            ? smoothStep(gameOverExitTimer_/kGameOverExitDuration):0.0f;
+        const float centerX=x+width*0.5f;
+        const float centerY=y+height*0.5f;
+
+        // 大きなブロックが四辺から飛来して画面全体を覆う。
+        // 従来の半透明パネルよりプレイ画面との差を強くし、ゲーム終了を一目で伝える。
+        constexpr int columns=12;
+        constexpr int rows=7;
+        const float blockWidth=width/static_cast<float>(columns);
+        const float blockHeight=height/static_cast<float>(rows);
+        for(int row=0;row<rows;++row){
+            for(int column=0;column<columns;++column){
+                const int index=row*columns+column;
+                const float targetX=x+(static_cast<float>(column)+0.5f)*blockWidth;
+                const float targetY=y+(static_cast<float>(row)+0.5f)*blockHeight;
+                const float distanceX=std::abs(static_cast<float>(column)-(columns-1)*0.5f);
+                const float distanceY=std::abs(static_cast<float>(row)-(rows-1)*0.5f);
+                const float delay=(distanceX+distanceY)*0.018f;
+                const float localProgress=smoothStep((gameOverTimer_-delay)/0.62f);
+                const bool horizontalEdge=distanceX/(columns*0.5f)>distanceY/(rows*0.5f);
+                float startX=targetX;
+                float startY=targetY;
+                if(horizontalEdge) startX=column<columns/2?x-width*0.18f:x+width*1.18f;
+                else startY=row<rows/2?y-height*0.22f:y+height*1.22f;
+                float blockX=startX+(targetX-startX)*localProgress;
+                float blockY=startY+(targetY-startY)*localProgress;
+                const float burst=exitProgress*(0.45f+static_cast<float>((index*17)%11)/18.0f);
+                blockX+=(targetX-centerX)*burst*2.2f;
+                blockY+=(targetY-centerY)*burst*2.2f;
+                const int alpha=static_cast<int>(255.0f*localProgress*(1.0f-exitProgress));
+                const int shade=18+((row+column)%3)*7;
+                const ImU32 fill=(index%9==0)
+                    ? IM_COL32(43,42,84,alpha)
+                    : IM_COL32(shade,18,45+((index*7)%17),alpha);
+                const ImVec2 blockMin{blockX-blockWidth*0.49f,blockY-blockHeight*0.49f};
+                const ImVec2 blockMax{blockX+blockWidth*0.49f,blockY+blockHeight*0.49f};
+                draw->AddRectFilled(blockMin,blockMax,fill,2.0f);
+                draw->AddLine(blockMin,{blockMax.x,blockMin.y},
+                    IM_COL32(74,93,132,alpha/2),1.0f);
+                draw->AddLine(blockMin,{blockMin.x,blockMax.y},
+                    IM_COL32(70,45,100,alpha/2),1.0f);
+            }
+        }
+
+        // 壁完成時に強く揺らし、文字を一文字ずつ落下させる。
+        const float impactAge=gameOverTimer_-0.78f;
+        const float impactStrength=impactAge>=0.0f&&impactAge<0.32f
+            ? (1.0f-impactAge/0.32f)*9.0f:0.0f;
+        const float shakeX=std::sin(gameOverTimer_*92.0f)*impactStrength;
+        const float shakeY=std::cos(gameOverTimer_*77.0f)*impactStrength*0.55f;
+        const char* gameOverText="GAME OVER";
+        constexpr float gameOverFontSize=86.0f;
+        const ImVec2 titleSize=ImGui::GetFont()->CalcTextSizeA(
+            gameOverFontSize,FLT_MAX,0.0f,gameOverText);
+        float letterX=centerX-titleSize.x*0.5f+shakeX;
+        for(int i=0;gameOverText[i]!='\0';++i){
+            char letter[2]{gameOverText[i],'\0'};
+            const ImVec2 letterSize=ImGui::GetFont()->CalcTextSizeA(
+                gameOverFontSize,FLT_MAX,0.0f,letter);
+            if(gameOverText[i]==' '){letterX+=letterSize.x;continue;}
+            const float letterProgress=smoothStep((gameOverTimer_-0.72f-i*0.055f)/0.34f);
+            if(letterProgress<=0.0f)continue;
+            const float bounce=std::sin(letterProgress*kPi)*28.0f*(1.0f-letterProgress);
+            const float letterY=centerY-94.0f-(1.0f-letterProgress)*height*0.62f+bounce+shakeY;
+            const int alpha=static_cast<int>(255.0f*(1.0f-exitProgress));
+            draw->AddText(ImGui::GetFont(),gameOverFontSize,
+                {letterX+6.0f,letterY+8.0f},IM_COL32(6,7,18,alpha),letter);
+            draw->AddText(ImGui::GetFont(),gameOverFontSize,
+                {letterX,letterY},IM_COL32(232,241,246,alpha),letter);
+            letterX+=letterSize.x;
+        }
+
+        const float detailProgress=smoothStep((gameOverTimer_-1.18f)/0.36f)*(1.0f-exitProgress);
+        const char* lostText="ALL BLOCKS LOST";
+        const ImVec2 lostSize=ImGui::CalcTextSize(lostText);
+        draw->AddText({centerX-lostSize.x*0.5f,centerY+34.0f},
+            IM_COL32(255,151,62,static_cast<int>(255.0f*detailProgress)),lostText);
+
+        // 残機ブロックを順番に落下・消灯させ、0になったことを視覚化する。
+        for(int i=0;i<kMaxPlayerLives;++i){
+            const float blockProgress=smoothStep((gameOverTimer_-1.02f-i*0.14f)/0.34f);
+            const float blockX=centerX-54.0f+static_cast<float>(i)*54.0f;
+            const float targetY=centerY+81.0f;
+            const float blockY=targetY-(1.0f-blockProgress)*115.0f;
+            const int alpha=static_cast<int>(245.0f*blockProgress*(1.0f-exitProgress));
+            draw->AddRectFilled({blockX-17.0f,blockY-17.0f},{blockX+17.0f,blockY+17.0f},
+                IM_COL32(28,30,48,alpha),3.0f);
+            draw->AddRect({blockX-17.0f,blockY-17.0f},{blockX+17.0f,blockY+17.0f},
+                IM_COL32(222,70,92,alpha),3.0f,0,2.0f);
+            draw->AddLine({blockX-9.0f,blockY-9.0f},{blockX+9.0f,blockY+9.0f},
+                IM_COL32(255,91,91,alpha),3.0f);
+            draw->AddLine({blockX+9.0f,blockY-9.0f},{blockX-9.0f,blockY+9.0f},
+                IM_COL32(255,91,91,alpha),3.0f);
+        }
+
+        if(gameOverTimer_>=kGameOverInputDelay&&!gameOverExitActive_){
+            const float blink=0.58f+0.42f*std::sin(
+                (gameOverTimer_-kGameOverInputDelay)*kPi*2.0f);
+            const char* retryText="ENTER / GAMEPAD A : REBUILD";
+            const ImVec2 retrySize=ImGui::CalcTextSize(retryText);
+            const float promptY=y+height*0.77f+std::sin(gameOverTimer_*3.4f)*4.0f;
+            draw->AddRectFilled(
+                {centerX-retrySize.x*0.5f-22.0f,promptY-11.0f},
+                {centerX+retrySize.x*0.5f+22.0f,promptY+retrySize.y+11.0f},
+                IM_COL32(5,15,29,205),6.0f);
+            draw->AddText({centerX-retrySize.x*0.5f,promptY},
+                IM_COL32(82,232,255,static_cast<int>(blink*255.0f)),retryText);
+            const char* titleText="ESC : RETURN TO TITLE";
+            const ImVec2 titleSize=ImGui::CalcTextSize(titleText);
+            draw->AddText({centerX-titleSize.x*0.5f,promptY+42.0f},
+                IM_COL32(180,190,210,220),titleText);
+        }
     } else if (gameFlowState_ == GameFlowState::IntroCamera) {
         // 操作開始前であることが分かるよう、控えめなシネマティック表示を重ねる。
         const char* previewText="STAGE PREVIEW";
@@ -991,9 +1265,10 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
                 if(placement.itemId!=17) continue;
                 Camera* camera=object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
                 if(!camera) break;
+                const Vector3 goalHalfExtents = GetPlacementHalfExtents(placement);
                 const Vector3 markerPosition{
                     placement.position.x,
-                    placement.position.y+std::abs(placement.scale.y)*0.65f,
+                    placement.position.y + goalHalfExtents.y + 0.30f,
                     placement.position.z};
                 const Vector4 clip=TransformPoint4(
                     {markerPosition.x,markerPosition.y,markerPosition.z,1.0f},
@@ -1065,6 +1340,96 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             {textPosition.x + textSize.x + 18.0f, textPosition.y + textSize.y + 10.0f},
             IM_COL32(8,12,20,220), 7.0f);
         draw->AddText(textPosition, goalReached_ ? IM_COL32(90,255,120,255) : IM_COL32(255,235,90,255), runtimeMessage_.c_str());
+    }
+
+    // 操作開始前のカウントダウンからプレイ中まで、残機をブロック3個で表示する。
+    // 増減直後のスロットだけ色・揺れ・小片を加え、どこが変わったかを明確にする。
+    if (mode_ == Mode::GamePlay &&
+        (gameFlowState_ == GameFlowState::Countdown ||
+         gameFlowState_ == GameFlowState::Playing)) {
+        const ImVec2 panelMin{x + width - 204.0f, y + 18.0f};
+        const ImVec2 panelMax{x + width - 18.0f, y + 82.0f};
+        draw->AddRectFilled(panelMin, panelMax, IM_COL32(5, 12, 27, 210), 9.0f);
+        draw->AddRect(panelMin, panelMax, IM_COL32(70, 205, 235, 155), 9.0f, 0, 1.5f);
+        draw->AddText({panelMin.x + 13.0f, panelMin.y + 9.0f},
+            IM_COL32(190, 238, 250, 255), "LIFE");
+
+        char lifeCount[16]{};
+        std::snprintf(lifeCount, sizeof(lifeCount), "x %d", playerLives_);
+        draw->AddText({panelMax.x - 43.0f, panelMin.y + 9.0f},
+            IM_COL32(235, 248, 255, 255), lifeCount);
+
+        const float changeProgress = lifeChangeTimer_ > 0.0f
+            ? 1.0f - lifeChangeTimer_ / kLifeChangeDuration
+            : 1.0f;
+        const float changeAlpha = 1.0f - std::clamp(changeProgress, 0.0f, 1.0f);
+        for (int i = 0; i < kMaxPlayerLives; ++i) {
+            const bool activeLife = i < playerLives_;
+            const bool changing = lifeChangeTimer_ > 0.0f && i == lifeChangedSlot_;
+            float shakeX = 0.0f;
+            float popScale = 1.0f;
+            if (changing) {
+                shakeX = lifeChangeAmount_ < 0
+                    ? std::sin(changeProgress * kPi * 12.0f) * 4.0f * changeAlpha
+                    : 0.0f;
+                popScale += std::sin(std::clamp(changeProgress * 1.8f, 0.0f, 1.0f) * kPi) * 0.28f;
+            }
+
+            const ImVec2 center{
+                panelMin.x + 71.0f + static_cast<float>(i) * 37.0f + shakeX,
+                panelMin.y + 43.0f};
+            const float half = 11.0f * popScale;
+            ImU32 fill = activeLife
+                ? IM_COL32(35, 220, 245, 255)
+                : IM_COL32(35, 48, 64, 220);
+            ImU32 border = activeLife
+                ? IM_COL32(190, 250, 255, 255)
+                : IM_COL32(75, 88, 105, 210);
+            if (changing) {
+                fill = lifeChangeAmount_ > 0
+                    ? IM_COL32(255, 194, 55, 255)
+                    : IM_COL32(205, 55, 70, static_cast<int>(180.0f * changeAlpha + 50.0f));
+                border = lifeChangeAmount_ > 0
+                    ? IM_COL32(255, 239, 160, 255)
+                    : IM_COL32(255, 145, 150, 255);
+            }
+            draw->AddRectFilled(
+                {center.x - half, center.y - half},
+                {center.x + half, center.y + half}, fill, 2.0f);
+            draw->AddRect(
+                {center.x - half, center.y - half},
+                {center.x + half, center.y + half}, border, 2.0f, 0, 2.0f);
+            draw->AddLine(
+                {center.x - half + 3.0f, center.y - half + 3.0f},
+                {center.x + half - 3.0f, center.y - half + 3.0f},
+                activeLife ? IM_COL32(220, 255, 255, 210) : IM_COL32(95, 105, 120, 130),
+                2.0f);
+
+            if (changing && lifeChangeAmount_ < 0) {
+                for (int fragment = 0; fragment < 4; ++fragment) {
+                    const float angle = kPi * 0.25f + kPi * 0.5f * static_cast<float>(fragment);
+                    const float distance = 13.0f + changeProgress * 15.0f;
+                    const ImVec2 fragmentCenter{
+                        center.x + std::cos(angle) * distance,
+                        center.y + std::sin(angle) * distance};
+                    const float fragmentHalf = 2.5f * changeAlpha;
+                    draw->AddRectFilled(
+                        {fragmentCenter.x - fragmentHalf, fragmentCenter.y - fragmentHalf},
+                        {fragmentCenter.x + fragmentHalf, fragmentCenter.y + fragmentHalf},
+                        IM_COL32(255, 105, 115, static_cast<int>(changeAlpha * 255.0f)));
+                }
+            }
+        }
+
+        if (lifeChangeTimer_ > 0.0f && lifeChangeAmount_ != 0) {
+            const char* changeText = lifeChangeAmount_ > 0 ? "+1" : "-1";
+            const ImU32 changeColor = lifeChangeAmount_ > 0
+                ? IM_COL32(255, 220, 80, static_cast<int>(changeAlpha * 255.0f))
+                : IM_COL32(255, 100, 110, static_cast<int>(changeAlpha * 255.0f));
+            draw->AddText(
+                {panelMax.x - 33.0f, panelMax.y + 5.0f - changeProgress * 13.0f},
+                changeColor, changeText);
+        }
     }
 
     // 小型ブロックが画面奥から飛来して一枚の壁を組み上げ、完全に隠れた瞬間に
@@ -1454,6 +1819,20 @@ void StageEditor::UpdateGameFlow(Input* input) {
     }
 
     if (gameFlowState_ == GameFlowState::IntroCamera) {
+        // ステージ紹介中はカメラだけを移動させる。
+        // 自機はスタート地点へ固定し、カメラ演出や直前の入力状態によって
+        // ワールド座標が変化しないよう毎フレーム明示的に戻す。
+        playerPosition_ = playerRespawnPosition_;
+        playerPosition_.z = 0.0f;
+        playerVelocity_ = {};
+        playerGrounded_ = false;
+        if (playerObject_) {
+            playerObject_->SetPosition(playerPosition_);
+            playerObject_->SetRotation({});
+            playerObject_->SetScale({1.0f, 1.0f, 1.0f});
+            playerObject_->Update();
+        }
+
         const bool skipIntro=introCameraSeen_ && (
             input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE) ||
             input->TriggerGamepadButton(XINPUT_GAMEPAD_A));
@@ -1481,6 +1860,33 @@ void StageEditor::UpdateGameFlow(Input* input) {
         if (startCountdownTimer_>=kStartCountdownDuration) {
             gameFlowState_=GameFlowState::Playing;
             startGoTimer_=kStartGoDuration;
+        }
+        return;
+    }
+
+    if (gameFlowState_ == GameFlowState::GameOver) {
+        gameOverTimer_ += deltaTime;
+        if (gameOverExitActive_) {
+            gameOverExitTimer_ += deltaTime;
+            if (gameOverExitTimer_ >= kGameOverExitDuration) {
+                // 壁が外側へ崩れ切ってからランタイムを戻し、場面転換を明確にする。
+                ResetRuntimeState();
+                gameFlowState_ = GameFlowState::Countdown;
+                startCountdownTimer_ = 0.0f;
+                countdownImpactBeat_ = -1;
+                countdownImpactEmitted_ = false;
+                suppressStartJumpUntilReleased_ = true;
+                gameOverExitActive_ = false;
+                gameOverExitTimer_ = 0.0f;
+            }
+            return;
+        }
+        const bool retry = input->TriggerKey(DIK_RETURN) ||
+            input->TriggerKey(DIK_SPACE) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+        if (gameOverTimer_ >= kGameOverInputDelay && retry) {
+            gameOverExitActive_ = true;
+            gameOverExitTimer_ = 0.0f;
         }
         return;
     }
@@ -1533,13 +1939,26 @@ void StageEditor::ResetRuntimeState() {
     runtimeMessageTimer_ = 0.0f;
     doorCooldown_ = 0.0f;
     clearReturnTimer_ = 0.0f;
+    gameOverTimer_ = 0.0f;
+    gameOverExitActive_ = false;
+    gameOverExitTimer_ = 0.0f;
     startTransitionTimer_ = 0.0f;
     startTransitionActive_ = false;
     startTransitionContinue_ = false;
     introCameraTimer_ = 0.0f;
     startCountdownTimer_ = 0.0f;
+    countdownImpactBeat_ = -1;
+    countdownImpactEmitted_ = false;
     startGoTimer_ = 0.0f;
     suppressStartJumpUntilReleased_ = false;
+    playerLives_ = kMaxPlayerLives;
+    lifeChangeAmount_ = 0;
+    lifeChangedSlot_ = -1;
+    lifeChangeTimer_ = 0.0f;
+    respawnEffectActive_ = false;
+    respawnEffectFromFall_ = false;
+    respawnEffectTimer_ = 0.0f;
+    respawnEffectOrigin_ = {};
     playerFlashTimer_ = 0.0f;
     playerDamageCooldown_ = 0.0f;
     runtimeMessage_.clear();
@@ -1596,6 +2015,158 @@ void StageEditor::RespawnPlayer(bool damaged) {
     }
 }
 
+// 処理概要: ミスした位置でプレイヤーを小型ブロックへ分解する演出を開始する。
+// 注意事項: 演出中は通常のプレイヤー更新と敵・ギミック更新を止め、重複発動を防ぐ。
+void StageEditor::BeginRespawnEffect(bool fellOutOfStage) {
+    if (respawnEffectActive_) return;
+    ChangePlayerLives(-1);
+    respawnEffectActive_ = true;
+    respawnEffectFromFall_ = fellOutOfStage;
+    respawnEffectTimer_ = 0.0f;
+    respawnEffectOrigin_ = playerPosition_;
+    playerVelocity_ = {};
+    playerGrounded_ = false;
+    playerDamageCooldown_ = kRespawnEffectDuration + 0.5f;
+
+    for (auto& block : respawnEffectBlocks_) {
+        if (!block.object) continue;
+        block.object->SetPosition(respawnEffectOrigin_);
+        block.object->SetRotation({});
+        block.object->SetScale({0.14f, 0.14f, 0.14f});
+        block.object->SetColor(block.color);
+        block.object->Update();
+    }
+}
+
+// 処理概要: 残機を0～最大値へ制限し、HUDへ増減アニメーションを通知する。
+// 注意事項: 同じ値になる変更では演出を再発火せず、死亡処理の重複表示を防ぐ。
+void StageEditor::ChangePlayerLives(int amount) {
+    if (amount == 0) return;
+    const int previousLives = playerLives_;
+    playerLives_ = std::clamp(playerLives_ + amount, 0, kMaxPlayerLives);
+    const int appliedAmount = playerLives_ - previousLives;
+    if (appliedAmount == 0) return;
+
+    lifeChangeAmount_ = appliedAmount;
+    lifeChangedSlot_ = appliedAmount < 0
+        ? playerLives_
+        : playerLives_ - 1;
+    lifeChangeTimer_ = kLifeChangeDuration;
+}
+
+// 処理概要: 分解、収束、リスポーン地点での再構築を約3秒で連続再生する。
+// 注意事項: 最後に通常のRespawnPlayerへ戻し、位置・速度・当たり判定を確実に初期化する。
+void StageEditor::UpdateRespawnEffect(float deltaTime) {
+    if (!respawnEffectActive_) return;
+    respawnEffectTimer_ = (std::min)(
+        kRespawnEffectDuration, respawnEffectTimer_ + deltaTime);
+
+    // 死亡時の分解を約1秒、復活時の再構築を約1秒延長する。
+    constexpr float scatterEnd = 0.88f;
+    constexpr float collapseEnd = 1.48f;
+    constexpr float assemblyEnd = 2.70f;
+    const auto smoothStep = [](float value) {
+        const float t = std::clamp(value, 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    };
+    const auto lerpVector = [](const Vector3& from, const Vector3& to, float t) {
+        return Vector3{
+            from.x + (to.x - from.x) * t,
+            from.y + (to.y - from.y) * t,
+            from.z + (to.z - from.z) * t};
+    };
+
+    if (respawnEffectTimer_ >= collapseEnd) {
+        // ブロックが消えた瞬間に復帰地点へカメラの追従先だけ移す。
+        // プレイヤー本体は演出完了まで描画しない。
+        playerPosition_ = playerRespawnPosition_;
+        playerPosition_.z = 0.0f;
+    }
+
+    for (size_t i = 0; i < respawnEffectBlocks_.size(); ++i) {
+        auto& block = respawnEffectBlocks_[i];
+        if (!block.object) continue;
+        Vector3 position = respawnEffectOrigin_;
+        float scale = 0.14f;
+        Vector4 color = block.color;
+
+        if (respawnEffectTimer_ < scatterEnd) {
+            const float progress = smoothStep(respawnEffectTimer_ / scatterEnd);
+            position.x += block.direction.x * progress * 0.90f;
+            position.y += block.direction.y * progress * 0.90f;
+            position.z += block.direction.z * progress;
+            scale *= 0.72f + progress * 0.28f;
+        } else if (respawnEffectTimer_ < collapseEnd) {
+            const float progress = smoothStep(
+                (respawnEffectTimer_ - scatterEnd) / (collapseEnd - scatterEnd));
+            Vector3 scattered = respawnEffectOrigin_;
+            scattered.x += block.direction.x * 0.90f;
+            scattered.y += block.direction.y * 0.90f;
+            scattered.z += block.direction.z;
+            position = lerpVector(scattered, respawnEffectOrigin_, progress);
+            scale *= 1.0f - progress * 0.92f;
+            color.w = 1.0f - progress;
+        } else if (respawnEffectTimer_ < assemblyEnd) {
+            const float progress = smoothStep(
+                (respawnEffectTimer_ - collapseEnd) / (assemblyEnd - collapseEnd));
+            Vector3 start = playerRespawnPosition_;
+            start.x += block.assemblyOffset.x * 2.4f;
+            start.y += -1.35f - static_cast<float>(i % 3) * 0.12f;
+            Vector3 target = playerRespawnPosition_;
+            target.x += block.assemblyOffset.x;
+            target.y += block.assemblyOffset.y;
+            position = lerpVector(start, target, progress);
+            scale = 0.05f + progress * 0.10f;
+            color = (i == respawnEffectBlocks_.size() - 1)
+                ? Vector4{1.0f, 0.72f, 0.20f, 1.0f}
+                : Vector4{0.35f + progress * 0.55f, 0.90f + progress * 0.08f, 1.0f, 1.0f};
+        } else {
+            const float progress = smoothStep(
+                (respawnEffectTimer_ - assemblyEnd) /
+                (kRespawnEffectDuration - assemblyEnd));
+            position = playerRespawnPosition_;
+            position.x += block.assemblyOffset.x * (1.0f - progress);
+            position.y += block.assemblyOffset.y * (1.0f - progress);
+            scale = 0.15f * (1.0f - progress);
+            color = {1.0f, 0.88f + progress * 0.12f, 0.55f + progress * 0.45f,
+                1.0f - progress};
+        }
+
+        block.object->SetPosition(position);
+        block.object->SetRotation({
+            respawnEffectTimer_ * block.rotationSpeed,
+            respawnEffectTimer_ * block.rotationSpeed * 0.7f,
+            respawnEffectTimer_ * block.rotationSpeed * 0.45f});
+        block.object->SetScale({scale, scale, scale});
+        block.object->SetColor(color);
+        block.object->Update();
+    }
+
+    if (respawnEffectTimer_ >= kRespawnEffectDuration) {
+        const bool fellOutOfStage = respawnEffectFromFall_;
+        respawnEffectActive_ = false;
+        if (playerLives_ <= 0) {
+            // 最後の分解演出を最後まで見せた後、プレイヤーを復元せず
+            // 専用のゲームオーバー画面へ切り替える。
+            playerVelocity_ = {};
+            playerGrounded_ = false;
+            gameOverTimer_ = 0.0f;
+            gameOverExitActive_ = false;
+            gameOverExitTimer_ = 0.0f;
+            gameFlowState_ = GameFlowState::GameOver;
+            runtimeMessage_.clear();
+            runtimeMessageTimer_ = 0.0f;
+            return;
+        }
+        RespawnPlayer(false);
+        playerFlashTimer_ = 0.65f;
+        playerDamageCooldown_ = 1.0f;
+        ShowRuntimeMessage(
+            fellOutOfStage ? "BACK TO CHECKPOINT" : "DAMAGE!  REBUILT",
+            1.0f);
+    }
+}
+
 // 処理概要: StageEditorが担当する「ShowRuntimeMessage」処理を実行する。
 // 注意事項: 呼び出し順序と所有データの整合性を保ちながら状態を更新する。
 void StageEditor::ShowRuntimeMessage(const std::string& message, float seconds) {
@@ -1621,6 +2192,7 @@ bool StageEditor::SaveProgressAt(size_t placementIndex) {
     root["stars"] = collectedStars_;
     root["bubbles"] = collectedBubbles_;
     root["keys"] = keyCount_;
+    root["lives"] = playerLives_;
     root["used_save_point_ids"] = nlohmann::json::array();
     for (size_t i=0;i<placements_.size()&&i<runtimeSavePointUsed_.size();++i) {
         if (runtimeSavePointUsed_[i]!=0) {
@@ -1666,6 +2238,7 @@ bool StageEditor::LoadSavedProgress() {
         collectedStars_ = root.value("stars", 0);
         collectedBubbles_ = root.value("bubbles", 0);
         keyCount_ = root.value("keys", 0);
+        playerLives_ = std::clamp(root.value("lives", kMaxPlayerLives), 0, kMaxPlayerLives);
 
         // コンティニュー後も使用済みセーブポイントを復元し、
         // 過去の地点へ戻って触れてもリスポーン位置が巻き戻らないようにする。
@@ -1737,8 +2310,9 @@ bool StageEditor::IsPlayerOverlappingPlacement(size_t index, float padding) cons
     if (index >= placements_.size() || !IsRuntimePlacementActive(index)) return false;
     const Placement& placement = placements_[index];
     const Vector3 position = GetRuntimePlacementPosition(index);
-    const float halfX = (std::max)(std::abs(placement.scale.x) * 0.5f, 0.15f) + padding;
-    const float halfY = (std::max)(std::abs(placement.scale.y) * 0.5f, 0.15f) + padding;
+    const Vector3 halfExtents = GetPlacementHalfExtents(placement);
+    const float halfX = halfExtents.x + padding;
+    const float halfY = halfExtents.y + padding;
     return std::abs(playerPosition_.x - position.x) < kPlayerHalfSize + halfX &&
         std::abs(playerPosition_.y - position.y) < kPlayerHalfSize + halfY;
 }
@@ -1765,8 +2339,9 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
             position.x += placements_[i].moveOffset.x * amount;
             position.y += placements_[i].moveOffset.y * amount;
             position.z += placements_[i].moveOffset.z * amount;
-            const float halfX = (std::max)(std::abs(placements_[i].scale.x) * 0.5f, 0.15f);
-            const float halfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.15f);
+            const Vector3 halfExtents = GetPlacementHalfExtents(placements_[i]);
+            const float halfX = halfExtents.x;
+            const float halfY = halfExtents.y;
             const float oldTop = previousPosition.y + halfY;
             const bool standingOnPlatform =
                 std::abs(playerPosition_.x - previousPosition.x) <= kPlayerHalfSize + halfX &&
@@ -1776,8 +2351,9 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
                 playerPosition_.y += position.y - previousPosition.y;
             }
         } else if (itemId == 28) {
-            const float halfX = (std::max)(std::abs(placements_[i].scale.x) * 0.5f, 0.15f);
-            const float halfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.15f);
+            const Vector3 halfExtents = GetPlacementHalfExtents(placements_[i]);
+            const float halfX = halfExtents.x;
+            const float halfY = halfExtents.y;
             const float oldTop = previousPosition.y + halfY;
             const bool standingOnFloor = IsRuntimePlacementActive(i) &&
                 std::abs(playerPosition_.x - previousPosition.x) <= kPlayerHalfSize + halfX &&
@@ -1837,7 +2413,9 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
             }
         }
         runtimePlacementPositions_[i] = position;
-        if (i < objects_.size() && objects_[i]) objects_[i]->SetPosition(position);
+        if (i < objects_.size() && objects_[i]) {
+            ApplyPlacementVisualTransform(objects_[i].get(), placements_[i], position);
+        }
     }
 
     if (playerObject_) {
@@ -1880,8 +2458,9 @@ void StageEditor::UpdateEnemies(float deltaTime) {
         if (placement.itemId < 22 || placement.itemId > 24 || !IsRuntimePlacementActive(i)) continue;
 
         Vector3 position = runtimePlacementPositions_[i];
-        const float halfX = (std::max)(std::abs(placement.scale.x) * 0.5f, 0.15f);
-        const float halfY = (std::max)(std::abs(placement.scale.y) * 0.5f, 0.15f);
+        const Vector3 halfExtents = GetPlacementHalfExtents(placement);
+        const float halfX = halfExtents.x;
+        const float halfY = halfExtents.y;
 
         if (placement.itemId == 22) { // Walker: walls and ledges reverse its patrol direction.
             constexpr float speed = 1.6f;
@@ -2040,8 +2619,9 @@ void StageEditor::ResolvePlacedSolidCollisions() {
             }
 
             const Vector3 floorPosition = GetRuntimePlacementPosition(i);
-            const float floorHalfX = (std::max)(std::abs(placements_[i].scale.x) * 0.5f, 0.15f);
-            const float floorHalfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.15f);
+            const Vector3 floorHalfExtents = GetPlacementHalfExtents(placements_[i]);
+            const float floorHalfX = floorHalfExtents.x;
+            const float floorHalfY = floorHalfExtents.y;
             const float floorTop = floorPosition.y + floorHalfY;
             const float playerBottom = playerPosition_.y - kPlayerHalfSize;
             const bool overlapsHorizontally =
@@ -2062,8 +2642,9 @@ void StageEditor::ResolvePlacedSolidCollisions() {
         if (!IsPlayerOverlappingPlacement(i)) continue;
 
         const Vector3 position = GetRuntimePlacementPosition(i);
-        const float halfX = (std::max)(std::abs(placements_[i].scale.x) * 0.5f, 0.15f);
-        const float halfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.15f);
+        const Vector3 halfExtents = GetPlacementHalfExtents(placements_[i]);
+        const float halfX = halfExtents.x;
+        const float halfY = halfExtents.y;
         const float dx = playerPosition_.x - position.x;
         const float dy = playerPosition_.y - position.y;
         const float penetrationX = kPlayerHalfSize + halfX - std::abs(dx);
@@ -2183,11 +2764,11 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
             // Ignore hazards briefly after respawning. Without this guard an
             // enemy overlapping the checkpoint could immediately damage the
             // player again on every frame.
-            if (playerDamageCooldown_ <= 0.0f) RespawnPlayer(true);
+            if (playerDamageCooldown_ <= 0.0f) BeginRespawnEffect(false);
             return;
         case 29: { // Jump Pad
             const Vector3 padPosition = GetRuntimePlacementPosition(i);
-            const float padHalfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.1f);
+            const float padHalfY = GetPlacementHalfExtents(placements_[i]).y;
             // Activate only while landing from above; side and underside
             // contacts must not unexpectedly launch the player.
             if (playerPosition_.y >= padPosition.y && playerVelocity_.y <= 0.0f) {
@@ -2200,7 +2781,7 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
         }
         case 30: { // Conveyor Floor
             const Vector3 conveyorPosition = GetRuntimePlacementPosition(i);
-            const float conveyorHalfY = (std::max)(std::abs(placements_[i].scale.y) * 0.5f, 0.1f);
+            const float conveyorHalfY = GetPlacementHalfExtents(placements_[i]).y;
             const float playerBottom = playerPosition_.y - kPlayerHalfSize;
             const float conveyorTop = conveyorPosition.y + conveyorHalfY;
             // Only carry a player standing on the upper face. Side contact must
@@ -2251,6 +2832,11 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
 // 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdatePlayer(Input* input) {
     constexpr float deltaTime = 1.0f / 60.0f;
+    if (respawnEffectActive_) {
+        UpdateRespawnEffect(deltaTime);
+        return;
+    }
+
     float moveInput = 0.0f;
     float climbInput = 0.0f;
     bool jumpTriggered = false;
@@ -2304,6 +2890,7 @@ void StageEditor::UpdatePlayer(Input* input) {
     playerGrounded_ = false;
     MovePlayerVertical(playerVelocity_.y * deltaTime);
     UpdateGimmickCollisions(input, deltaTime);
+    if (respawnEffectActive_) return;
     ResolvePlacedSolidCollisions();
 
     if (playerGrounded_) {
@@ -2339,9 +2926,7 @@ void StageEditor::UpdatePlayer(Input* input) {
     // playerRespawnPosition_はPlayer Startを初期値とし、Checkpointまたは
     // Save Pointに触れるたびに直近の位置へ更新される。
     if (fellOutOfStage) {
-        // 待機時間は設けず、落下を検出したフレームで直ちに復帰させる。
-        RespawnPlayer(true);
-        ShowRuntimeMessage("BACK TO CHECKPOINT", 1.0f);
+        BeginRespawnEffect(true);
         return;
     }
     if (playerObject_) {
@@ -2409,13 +2994,73 @@ int StageEditor::FindNearestPlacement(float maxDistance) const {
 
 const StageEditor::ItemDefinition* StageEditor::FindItem(int id) const {for(const auto& item:kItems)if(item.id==id)return &item;return nullptr;}
 
+// 処理概要: 論理配置位置へモデル固有のローカルオフセットを合成する。
+// 注意事項: 配置のY回転に追従させ、モデル差し替え時の原点補正をJSONへ混在させない。
+Vector3 StageEditor::GetPlacementModelPosition(
+    const Placement& placement,
+    const Vector3& logicalPosition) const {
+    const ItemDefinition* item = FindItem(placement.itemId);
+    if (!item) return logicalPosition;
+    const float cosine = std::cos(placement.rotation.y);
+    const float sine = std::sin(placement.rotation.y);
+    return {
+        logicalPosition.x + item->modelOffset.x * cosine + item->modelOffset.z * sine,
+        logicalPosition.y + item->modelOffset.y,
+        logicalPosition.z - item->modelOffset.x * sine + item->modelOffset.z * cosine
+    };
+}
+
+// 処理概要: 論理回転とモデルの軸補正を合成する。
+Vector3 StageEditor::GetPlacementModelRotation(const Placement& placement) const {
+    const ItemDefinition* item = FindItem(placement.itemId);
+    if (!item) return placement.rotation;
+    return {
+        placement.rotation.x + item->modelRotation.x,
+        placement.rotation.y + item->modelRotation.y,
+        placement.rotation.z + item->modelRotation.z
+    };
+}
+
+// 処理概要: 論理サイズとモデル固有の表示倍率を成分ごとに合成する。
+Vector3 StageEditor::GetPlacementModelScale(const Placement& placement) const {
+    const ItemDefinition* item = FindItem(placement.itemId);
+    if (!item) return placement.scale;
+    return {
+        placement.scale.x * item->modelScale.x,
+        placement.scale.y * item->modelScale.y,
+        placement.scale.z * item->modelScale.z
+    };
+}
+
+// 処理概要: 描画モデルに依存しない論理当たり判定の半径を返す。
+Vector3 StageEditor::GetPlacementHalfExtents(const Placement& placement) const {
+    const ItemDefinition* item = FindItem(placement.itemId);
+    const Vector3 colliderScale = item ? item->colliderScale : Vector3{1.0f, 1.0f, 1.0f};
+    return {
+        (std::max)(std::abs(placement.scale.x * colliderScale.x) * 0.5f, 0.15f),
+        (std::max)(std::abs(placement.scale.y * colliderScale.y) * 0.5f, 0.15f),
+        (std::max)(std::abs(placement.scale.z * colliderScale.z) * 0.5f, 0.15f)
+    };
+}
+
+// 処理概要: 論理Transformを保持したまま、描画側へモデル補正を適用する。
+void StageEditor::ApplyPlacementVisualTransform(
+    Object3d* object,
+    const Placement& placement,
+    const Vector3& logicalPosition) const {
+    if (!object) return;
+    object->SetPosition(GetPlacementModelPosition(placement, logicalPosition));
+    object->SetRotation(GetPlacementModelRotation(placement));
+    object->SetScale(GetPlacementModelScale(placement));
+}
+
 // 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
 // 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 std::unique_ptr<Object3d> StageEditor::CreateObject(const Placement& p) const {
     const ItemDefinition* item=FindItem(p.itemId); if(!item||!object3dCommon_)return nullptr;
     Model* model=ModelManager::Load(item->modelDirectory,item->modelFile);
     auto object=std::make_unique<Object3d>(); object->Initialize(object3dCommon_); object->SetModel(model);
-    object->SetPosition(p.position); object->SetRotation(p.rotation); object->SetScale(p.scale); object->SetColor(item->color);
+    ApplyPlacementVisualTransform(object.get(), p, p.position); object->SetColor(item->color);
     object->SetEnvironmentTexture(environmentTexture_); object->SetEnvironmentCoefficient(environmentCoefficient_);
 
     // StageEditorの入力処理は3D描画より先に実行されるため、配置したオブジェクトは
@@ -2675,7 +3320,9 @@ bool StageEditor::SaveStageToPath(const std::string& path,const std::string& suc
 
     // ここから先は、新規保存と上書き保存で共通となるJSON生成処理。
     // ステージの基本設定、タイル、配置オブジェクトを1つのJSONへまとめる。
-    nlohmann::json root;root["version"]=5;root["name"]=stageName_;root["coordinate_system"]="tilemap_xy";root["tile_size"]=kTileSizePixels;root["tile_world_size"]=kTileWorldSize;root["size"]={stageWidth_,stageHeight_};
+    nlohmann::json root;root["version"]=6;root["name"]=stageName_;root["coordinate_system"]="tilemap_xy";root["tile_size"]=kTileSizePixels;root["tile_world_size"]=kTileWorldSize;root["size"]={stageWidth_,stageHeight_};
+    root["placement_transform"]="logical";
+    root["model_corrections"]="item_definition";
 
     // タイルは二次元配列として保存する。
     // y行ごとにx方向のタイルIDを並べることで、ロード時に同じ配置を復元できる。
