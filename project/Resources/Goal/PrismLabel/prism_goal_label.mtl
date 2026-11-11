@@ -1,0 +1,12 @@
+# Blender 4.4.1 MTL File: 'prism_goal_label.blend'
+# www.blender.org
+
+newmtl PrismGoalLabelMaterial
+Ns 360.000000
+Ka 0.250000 0.250000 0.250000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 3
+map_Kd prism_goal_label.png

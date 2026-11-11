@@ -51,6 +51,20 @@ void GameScene::Initialize(EngineContext* context) {
     Object3dCommon* object3dCommon =
         context_->GetObject3dCommon();
 
+    // ステージ全域を同じ明るさで読めるよう、位置に依存するPoint/Spot Lightは
+    // ゲーム本編では使用せず、斜め上からのDirectional Lightを主光源にする。
+    // 以前は原点付近のPoint Lightだけが左側の床を明るくしていたため、
+    // ステージ右側へ進むほど同じブロックでも暗く見えていた。
+    if (object3dCommon) {
+        DirectionalLight& directionalLight = object3dCommon->GetDirectionalLight();
+        directionalLight.color = { 0.88f, 0.96f, 1.0f, 1.0f };
+        directionalLight.direction = Math::Normalize(Vector3{ 0.25f, -0.78f, 0.57f });
+        directionalLight.intensity = 1.35f;
+
+        object3dCommon->GetPointLight().intensity = 0.0f;
+        object3dCommon->GetSpotLight().intensity = 0.0f;
+    }
+
     sceneObjects_.Initialize(
         object3dCommon,
         environment_.GetEnvironmentTextureHandle(),
