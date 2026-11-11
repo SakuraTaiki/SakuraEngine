@@ -42,7 +42,7 @@ float GetTitleStorageOrder(size_t index, size_t letterCount) {
 }
 
 const StageEditor::ItemDefinition kItems[] = {
-    {1, "Ground", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.32f,0.72f,0.25f,1}, {2.0f,0.5f,1.0f}},
+    {1, "Prism Ruin Ground", StageEditor::Category::Basic, "Resources/Block/PrismRuin", "prism_ruin_ground.obj", {1,1,1,1}, {2.0f,0.5f,1.0f}, {}, {}, {0.5f,2.0f,1.0f}},
     {2, "Wall", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.72f,0.34f,0.22f,1}, {1.0f,2.0f,1.0f}},
     {3, "Brick", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.72f,0.28f,0.18f,1}, {1.0f,1.0f,1.0f}},
     {4, "PBlock", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.25f,0.55f,0.95f,1}, {1,1,1}},
@@ -50,7 +50,7 @@ const StageEditor::ItemDefinition kItems[] = {
     {6, "Crumbling Floor", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.72f,0.55f,0.3f,1}, {1,0.4f,1}},
     {7, "Ice Block", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.65f,0.9f,1,0.85f}, {1,1,1}},
     {8, "Moving Floor", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.62f,0.32f,0.95f,1}, {2,0.3f,1}},
-    {9, "Key Block", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.95f,0.72f,0.2f,1}, {1,1,1}},
+    {9, "Prism Locked Door", StageEditor::Category::Gimmick, "Resources/Gimmick/PrismLockedDoor", "prism_locked_door.obj", {1,1,1,1}, {1.0f,3.0f,0.45f}, {}, {}, {1.0f,0.333333f,2.222222f}, {1,1,1}},
     {10, "Timed Block", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.9f,0.35f,0.65f,1}, {1,1,1}},
     {11, "On Block", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.95f,0.2f,0.2f,1}, {1,1,1}},
     {12, "Off Block", StageEditor::Category::Basic, "Resources/Editor", "joint_box.obj", {0.2f,0.45f,0.95f,1}, {1,1,1}},
@@ -58,23 +58,31 @@ const StageEditor::ItemDefinition kItems[] = {
     {14, "Ladder", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.65f,0.4f,0.18f,1}, {0.5f,1.5f,0.2f}},
     {15, "Star", StageEditor::Category::Gimmick, "Resources/Editor", "ico_sphere.obj", {1,0.9f,0.15f,1}, {0.45f,0.45f,0.45f}},
     {16, "Bubble Pickup", StageEditor::Category::Gimmick, "Resources/Editor", "ico_sphere.obj", {0.45f,0.85f,1,0.65f}, {0.55f,0.55f,0.55f}},
-    {17, "Goal", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {1,0.85f,0.2f,1}, {0.3f,2,0.3f}},
+    {17, "Prism Beacon Goal", StageEditor::Category::Gimmick, "Resources/Goal/PrismBeacon", "prism_beacon.obj", {1,1,1,1}, {0.3f,2,0.3f}, {}, {}, {3.333333f,0.5f,3.333333f}},
     {18, "Door", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.45f,0.2f,0.08f,1}, {0.8f,1.5f,0.2f}},
     {19, "P Switch", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.15f,0.45f,0.95f,1}, {0.8f,0.25f,0.8f}},
-    {20, "Key", StageEditor::Category::Gimmick, "Resources/Editor", "ico_sphere.obj", {1,0.72f,0.1f,1}, {0.35f,0.35f,0.35f}},
+    {20, "Prism Key", StageEditor::Category::Gimmick, "Resources/Gimmick/PrismKey", "prism_key.obj", {1,1,1,1}, {0.55f,0.55f,0.35f}, {}, {}, {1,1,1}, {1,1,1}},
     {21, "On/Off Switch", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.9f,0.25f,0.25f,1}, {0.8f,0.35f,0.8f}},
-    {22, "Enemy Walker", StageEditor::Category::Enemy, "Resources/Editor", "ico_sphere.obj", {0.95f,0.48f,0.2f,1}, {0.6f,0.6f,0.6f}},
-    {23, "Enemy Flyer", StageEditor::Category::Enemy, "Resources/Editor", "ico_sphere.obj", {0.85f,0.25f,0.85f,1}, {0.55f,0.55f,0.55f}},
+    {22, "Crash Cube", StageEditor::Category::Enemy, "Resources/Enemy/CrashCube", "crash_cube.obj", {1,1,1,1}, {0.9f,0.65f,0.8f}, {}, {}, {1,1,1}, {0.9f,0.65f,0.8f}},
+    {23, "Prism Glider", StageEditor::Category::Enemy, "Resources/Enemy/PrismGlider", "prism_glider.obj", {1,1,1,1}, {0.8f,0.65f,0.8f}, {}, {}, {1,1,1}, {0.75f,0.65f,0.75f}},
     {24, "Enemy Chaser", StageEditor::Category::Enemy, "Resources/Editor", "ico_sphere.obj", {0.95f,0.15f,0.15f,1}, {0.65f,0.65f,0.65f}},
     {25, "Player Start", StageEditor::Category::System, "Resources/Editor", "ico_sphere.obj", {0.2f,0.72f,1,1}, {0.5f,0.5f,0.5f}},
     {26, "Checkpoint", StageEditor::Category::System, "Resources/Editor", "joint_box.obj", {0.25f,1,0.45f,1}, {0.25f,1.4f,0.25f}},
     {27, "Spike", StageEditor::Category::Gimmick, "Resources/Editor", "ico_sphere.obj", {0.95f,0.18f,0.18f,1}, {0.45f,0.45f,0.45f}},
-    {28, "Falling Floor", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.82f,0.48f,0.18f,1}, {1.0f,0.3f,1.0f}},
-    {29, "Jump Pad", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.15f,0.9f,0.95f,1}, {0.9f,0.2f,1.0f}},
+    {28, "Fractured Falling Floor", StageEditor::Category::Gimmick, "Resources/Block/FallingRuin", "falling_ruin_idle.obj", {1,1,1,1}, {1.0f,0.3f,1.0f}, {}, {}, {1.0f,3.333333f,1.0f}},
+    {29, "Prism Spring Pad", StageEditor::Category::Gimmick, "Resources/Gimmick/PrismSpringPad", "prism_spring_pad_idle.obj", {1,1,1,1}, {0.9f,0.2f,1.0f}, {}, {}, {1.0f,5.0f,1.136f}},
     {30, "Conveyor Floor", StageEditor::Category::Gimmick, "Resources/Editor", "joint_box.obj", {0.95f,0.72f,0.12f,1}, {1.0f,0.22f,1.0f}},
-    {31, "Save Point", StageEditor::Category::System, "Resources/Editor", "joint_box.obj", {1.0f,0.72f,0.12f,1}, {0.35f,1.2f,0.35f}},
+    {31, "Prism Save Flag", StageEditor::Category::System, "Resources/System/PrismSaveFlag", "prism_save_flag_inactive.obj", {1,1,1,1}, {0.35f,1.2f,0.35f}, {}, {}, {2.5f,0.833f,2.5f}},
 };
 
+constexpr const char* kReleaseStagePaths[] = {
+    "Resources/Stages/SaveStage.json",
+    "Resources/Stages/Stage2.json"
+};
+constexpr const char* kReleaseStageLabels[] = {
+    "STAGE 1",
+    "STAGE 2"
+};
 float DistanceSquared(const Vector3& a, const Vector3& b) {
     const float x=a.x-b.x, y=a.y-b.y, z=a.z-b.z;
     return x*x+y*y+z*z;
@@ -204,6 +212,23 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     titlePromptObject_->SetEnableLighting(false);
     titlePromptObject_->SetEnvironmentTexture(environmentTexture_);
     titlePromptObject_->SetEnvironmentCoefficient(0.0f);
+    auto createStageSelectObject = [&](const char* directory, const char* fileName) {
+        auto object = std::make_unique<Object3d>();
+        object->Initialize(object3dCommon_);
+        object->SetModel(ModelManager::Load(directory, fileName));
+        object->SetEnableLighting(false);
+        object->SetEnvironmentTexture(environmentTexture_);
+        object->SetEnvironmentCoefficient(0.0f);
+        return object;
+    };
+    stageSelectStage1Object_ = createStageSelectObject(
+        "Resources/UI/StageSelect", "stage_1.obj");
+    stageSelectStage2Object_ = createStageSelectObject(
+        "Resources/UI/StageSelect", "stage_2.obj");
+    pauseRestartObject_ = createStageSelectObject(
+        "Resources/UI/PauseMenu", "pause_restart.obj");
+    pauseBackToSelectObject_ = createStageSelectObject(
+        "Resources/UI/PauseMenu", "pause_back_to_select.obj");
     constexpr const char* countdownModelFiles[] = {
         "countdown_1.obj", "countdown_2.obj", "countdown_3.obj"
     };
@@ -300,11 +325,27 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     cursorFrameObject_->SetEnvironmentCoefficient(0.0f);
     playerObject_=std::make_unique<Object3d>();
     playerObject_->Initialize(object3dCommon_);
-    playerObject_->SetModel(ModelManager::Load("Resources/Editor", "joint_box.obj"));
-    playerObject_->SetColor({0.12f,0.55f,1.0f,1.0f});
+    // 正式自機モデルは既存の1タイル当たり判定内に収まる寸法で作成している。
+    // 通常配色は専用テクスチャで表現し、Object3dの色は状態演出にだけ使用する。
+    playerObject_->SetModel(ModelManager::Load("Resources/Player", "prism_runner.obj"));
+    playerObject_->SetColor({1.0f,1.0f,1.0f,1.0f});
     playerObject_->SetEnableLighting(false);
     playerObject_->SetEnvironmentTexture(environmentTexture_);
     playerObject_->SetEnvironmentCoefficient(0.0f);
+    goalPreviewArrowObject_=std::make_unique<Object3d>();
+    goalPreviewArrowObject_->Initialize(object3dCommon_);
+    goalPreviewArrowObject_->SetModel(ModelManager::Load("Resources/Goal/PrismArrow", "prism_goal_arrow.obj"));
+    goalPreviewArrowObject_->SetColor({1.0f,1.0f,1.0f,1.0f});
+    goalPreviewArrowObject_->SetEnableLighting(false);
+    goalPreviewArrowObject_->SetEnvironmentTexture(environmentTexture_);
+    goalPreviewArrowObject_->SetEnvironmentCoefficient(0.0f);
+    goalPreviewLabelObject_=std::make_unique<Object3d>();
+    goalPreviewLabelObject_->Initialize(object3dCommon_);
+    goalPreviewLabelObject_->SetModel(ModelManager::Load("Resources/Goal/PrismLabel", "prism_goal_label.obj"));
+    goalPreviewLabelObject_->SetColor({1.0f,1.0f,1.0f,1.0f});
+    goalPreviewLabelObject_->SetEnableLighting(false);
+    goalPreviewLabelObject_->SetEnvironmentTexture(environmentTexture_);
+    goalPreviewLabelObject_->SetEnvironmentCoefficient(0.0f);
     NewStage();
     RefreshStageFiles();
     LoadPlaylist();
@@ -334,9 +375,15 @@ void StageEditor::Finalize() {
     respawnEffectBlocks_.clear();
     titleStartParticles_.clear();
     titlePromptObject_.reset();
+    stageSelectStage1Object_.reset();
+    stageSelectStage2Object_.reset();
+    pauseRestartObject_.reset();
+    pauseBackToSelectObject_.reset();
     countdownDigitObjects_.clear();
     titleLetterObjects_.clear();
     playerObject_.reset();
+    goalPreviewArrowObject_.reset();
+    goalPreviewLabelObject_.reset();
     cursorFrameObject_.reset();
     cursorObject_.reset();
     tileObjects_.clear();
@@ -355,6 +402,15 @@ void StageEditor::Update(Input* input) {
     constexpr float deltaTime = 1.0f / 60.0f;
     lifeChangeTimer_ = (std::max)(0.0f, lifeChangeTimer_ - deltaTime);
     if (mode_ == Mode::GamePlay) UpdateGameFlow(input);
+    const bool movementHudActive = mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::Playing && input != nullptr;
+    movementKeyW_ = movementHudActive && input->PushKey(DIK_W);
+    movementKeyA_ = movementHudActive && input->PushKey(DIK_A);
+    movementKeyS_ = movementHudActive && input->PushKey(DIK_S);
+    movementKeyD_ = movementHudActive && input->PushKey(DIK_D);
+    if (movementHudActive) {
+        movementHudPlayingTime_ += deltaTime;
+    }
     UpdateTitleStartParticles(deltaTime);
     UpdateGoalPreviewEffect();
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing &&
@@ -546,6 +602,72 @@ void StageEditor::Update(Input* input) {
         }
     } else {
         titlePromptBlinkTimer_ = 0.0f;
+    }
+
+    if (stageSelectStage1Object_ && stageSelectStage2Object_ &&
+        mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::StageSelect) {
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            const Vector3& cameraPosition = camera->GetTranslate();
+            const bool stage1Selected = selectedReleaseStage_ == 0;
+            stageSelectPulseTimer_ += deltaTime;
+            const float glowPulse = 0.5f + 0.5f * std::sin(stageSelectPulseTimer_ * 4.0f);
+            const float selectedScale = 1.10f + glowPulse * 0.06f;
+            const Vector4 selectedColor{
+                1.0f,
+                0.68f + glowPulse * 0.18f,
+                0.08f,
+                1.0f
+            };
+            const Vector4 idleColor{0.52f, 0.59f, 0.68f, 0.78f};
+
+            auto updateLabel = [&](Object3d* object, float offsetX, bool selected) {
+                if (!object) return;
+                object->SetPosition({
+                    cameraPosition.x + offsetX,
+                    cameraPosition.y + 0.35f,
+                    cameraPosition.z + 21.65f
+                });
+                object->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+                const float emphasis = selected ? selectedScale : 0.94f;
+                object->SetScale({-emphasis, emphasis, emphasis});
+                object->SetColor(selected ? selectedColor : idleColor);
+                object->Update();
+            };
+            updateLabel(stageSelectStage1Object_.get(), -3.55f, stage1Selected);
+            updateLabel(stageSelectStage2Object_.get(),  3.55f, !stage1Selected);
+        }
+    } else {
+        stageSelectPulseTimer_ = 0.0f;
+    }
+
+    if (pauseRestartObject_ && pauseBackToSelectObject_ &&
+        mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Pause) {
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            pauseMenuPulseTimer_ += deltaTime;
+            const float pulse = 0.5f + 0.5f * std::sin(pauseMenuPulseTimer_ * 4.0f);
+            const Vector3& cameraPosition = camera->GetTranslate();
+            const Vector4 selectedColor{1.0f, 0.70f + pulse * 0.18f, 0.08f, 1.0f};
+            const Vector4 idleColor{0.55f, 0.63f, 0.72f, 0.82f};
+            auto updatePauseLabel = [&](Object3d* object, float offsetY, bool selected) {
+                object->SetPosition({
+                    cameraPosition.x,
+                    cameraPosition.y + offsetY,
+                    cameraPosition.z + 21.4f
+                });
+                object->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+                const float scale = selected ? 1.05f + pulse * 0.06f : 0.90f;
+                object->SetScale({-scale, scale, scale});
+                object->SetColor(selected ? selectedColor : idleColor);
+                object->Update();
+            };
+            updatePauseLabel(pauseRestartObject_.get(), 1.15f, selectedPauseOption_ == 0);
+            updatePauseLabel(pauseBackToSelectObject_.get(), -1.15f, selectedPauseOption_ == 1);
+        }
+    } else {
+        pauseMenuPulseTimer_ = 0.0f;
     }
 
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Countdown &&
@@ -797,6 +919,35 @@ void StageEditor::UpdateGoalPreviewEffect() {
     const float phase=highlight ? (progress-0.58f)/(0.70f-0.58f) : 0.0f;
     const float pulse=highlight ? 0.5f+0.5f*std::sin(phase*kPi*4.0f) : 0.0f;
 
+    if(goalPreviewArrowObject_){
+        for(const Placement& placement:placements_){
+            if(placement.itemId!=17) continue;
+            const Vector3 goalHalfExtents=GetPlacementHalfExtents(placement);
+            const float bob=highlight ? std::sin(phase*kPi*4.0f)*0.08f : 0.0f;
+            goalPreviewArrowObject_->SetPosition({
+                placement.position.x,
+                placement.position.y+goalHalfExtents.y+0.72f+bob,
+                placement.position.z-0.36f});
+            const float arrowScale=highlight ? 0.92f+pulse*0.10f : 0.92f;
+            goalPreviewArrowObject_->SetRotation({0.0f,0.0f,0.0f});
+            goalPreviewArrowObject_->SetScale({arrowScale,arrowScale,arrowScale});
+            goalPreviewArrowObject_->SetColor({1.0f,1.0f,1.0f,1.0f});
+            goalPreviewArrowObject_->Update();
+            if(goalPreviewLabelObject_){
+                goalPreviewLabelObject_->SetPosition({
+                    placement.position.x,
+                    placement.position.y+goalHalfExtents.y+1.34f+bob,
+                    placement.position.z-0.38f});
+                goalPreviewLabelObject_->SetRotation({0.0f,0.0f,0.0f});
+                const float labelScale=0.94f+pulse*0.08f;
+                goalPreviewLabelObject_->SetScale({labelScale,labelScale,labelScale});
+                goalPreviewLabelObject_->SetColor({1.0f,1.0f,1.0f,1.0f});
+                goalPreviewLabelObject_->Update();
+            }
+            break;
+        }
+    }
+
     for(size_t i=0;i<placements_.size() && i<objects_.size();++i){
         if(placements_[i].itemId!=17 || !objects_[i]) continue;
         Object3d* goal=objects_[i].get();
@@ -831,8 +982,9 @@ void StageEditor::Draw3D() {
     // タイトル画面では、読み込み済みのステージを描画しない。
     // ステージデータ自体はメモリ上に保持しておき、フェード中央で
     // IntroCameraへ切り替わったフレームから描画を開始する。
-    const bool drawStageContents =
-        mode_ != Mode::GamePlay || gameFlowState_ != GameFlowState::Title;
+    const bool drawStageContents = mode_ != Mode::GamePlay ||
+        (gameFlowState_ != GameFlowState::Title &&
+         gameFlowState_ != GameFlowState::StageSelect);
 
     if (drawStageContents) {
         for (size_t i = 0; i < tileObjects_.size(); ++i) {
@@ -855,6 +1007,13 @@ void StageEditor::Draw3D() {
         if (playerObject_ && mode_ == Mode::GamePlay && !respawnEffectActive_ &&
             gameFlowState_ != GameFlowState::GameOver) {
             playerObject_->Draw();
+        }
+        const float introProgress=GetIntroCameraProgress();
+        if(goalPreviewArrowObject_ && mode_==Mode::GamePlay &&
+            gameFlowState_==GameFlowState::IntroCamera &&
+            introProgress>=0.58f && introProgress<0.70f){
+            goalPreviewArrowObject_->Draw();
+            if(goalPreviewLabelObject_) goalPreviewLabelObject_->Draw();
         }
         if (mode_ == Mode::GamePlay && respawnEffectActive_) {
             for (auto& block : respawnEffectBlocks_) {
@@ -908,6 +1067,15 @@ void StageEditor::Draw3D() {
     if (titlePromptObject_ && mode_ == Mode::GamePlay &&
         gameFlowState_ == GameFlowState::Title) {
         titlePromptObject_->Draw();
+    }
+    if (mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::StageSelect) {
+        if (stageSelectStage1Object_) stageSelectStage1Object_->Draw();
+        if (stageSelectStage2Object_) stageSelectStage2Object_->Draw();
+    }
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Pause) {
+        if (pauseRestartObject_) pauseRestartObject_->Draw();
+        if (pauseBackToSelectObject_) pauseBackToSelectObject_->Draw();
     }
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Countdown &&
         countdownDigitObjects_.size() >= 3) {
@@ -1109,6 +1277,23 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             draw->AddText({x+(width-resumeSize.x)*0.5f,y+height*0.55f},IM_COL32(255,220,80,255),resume);
         }
 #endif
+#ifdef PLAYER_RELEASE
+    } else if (gameFlowState_ == GameFlowState::StageSelect) {
+        // タイトルとゲームの間に独立した選択画面を置き、ロード前のステージを明示する。
+        draw->AddRectFilledMultiColor(
+            {x, y}, {x + width, y + height},
+            // 3D見出しより後に描くオーバーレイなので、不透明にしすぎず立体文字を残す。
+            IM_COL32(7, 14, 38, 118), IM_COL32(16, 20, 58, 118),
+            IM_COL32(35, 18, 67, 132), IM_COL32(8, 14, 35, 132));
+
+        // 選択肢以外の説明・カード・アイコンは置かず、3DのSTAGE 1 / STAGE 2だけを見せる。
+#endif
+    } else if (gameFlowState_ == GameFlowState::Pause) {
+        // プレイ画面を残しながら暗くし、3Dメニュー文字へ視線を集める。
+        draw->AddRectFilledMultiColor(
+            {x, y}, {x + width, y + height},
+            IM_COL32(4, 7, 18, 142), IM_COL32(8, 11, 28, 142),
+            IM_COL32(19, 10, 31, 154), IM_COL32(5, 7, 18, 154));
     } else if (gameFlowState_ == GameFlowState::Clear) {
         draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(4,18,10,220));
         const char* clear="STAGE CLEAR!";
@@ -1249,6 +1434,10 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             IM_COL32(4,10,20,190),8.0f);
         draw->AddText(previewPosition,IM_COL32(100,225,255,255),previewText);
 
+        // スキップ操作の説明は開発中の確認用だけに表示する。
+        // Release版ではEscでタイトルへ戻った後もintroCameraSeen_が保持されるため、
+        // 2回目以降の開始時に画面下へデバッグ風の文字が現れてしまう。
+#ifndef PLAYER_RELEASE
         if(introCameraSeen_){
             const char* skipText="ENTER / GAMEPAD A : SKIP";
             const ImVec2 skipSize=ImGui::CalcTextSize(skipText);
@@ -1256,45 +1445,8 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
                 {x+(width-skipSize.x)*0.5f,y+height*0.90f},
                 IM_COL32(205,220,235,205),skipText);
         }
+#endif
 
-        const float introProgress=GetIntroCameraProgress();
-        if(introProgress>=0.58f && introProgress<0.70f){
-            // ゴール本体の真上へ矢印を投影し、どのオブジェクトが目的地かを明確にする。
-            const float goalPhase=(introProgress-0.58f)/(0.70f-0.58f);
-            for(const Placement& placement:placements_){
-                if(placement.itemId!=17) continue;
-                Camera* camera=object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
-                if(!camera) break;
-                const Vector3 goalHalfExtents = GetPlacementHalfExtents(placement);
-                const Vector3 markerPosition{
-                    placement.position.x,
-                    placement.position.y + goalHalfExtents.y + 0.30f,
-                    placement.position.z};
-                const Vector4 clip=TransformPoint4(
-                    {markerPosition.x,markerPosition.y,markerPosition.z,1.0f},
-                    camera->GetViewProjectionMatrix());
-                if(clip.w<=0.001f) break;
-                const ImVec2 goalTop{
-                    x+(clip.x/clip.w*0.5f+0.5f)*width,
-                    y+(-clip.y/clip.w*0.5f+0.5f)*height};
-                const float arrowBob=std::sin(goalPhase*kPi*4.0f)*5.0f;
-                const ImVec2 arrowTip{goalTop.x,goalTop.y-12.0f+arrowBob};
-                const ImVec2 arrowLeft{goalTop.x-17.0f,arrowTip.y-25.0f};
-                const ImVec2 arrowRight{goalTop.x+17.0f,arrowTip.y-25.0f};
-                draw->AddTriangleFilled(
-                    arrowTip,arrowLeft,arrowRight,IM_COL32(255,245,145,250));
-                draw->AddLine(
-                    {goalTop.x,arrowTip.y-48.0f},
-                    {goalTop.x,arrowTip.y-20.0f},
-                    IM_COL32(255,245,145,250),8.0f);
-                const char* goalText="GOAL";
-                const ImVec2 goalTextSize=ImGui::CalcTextSize(goalText);
-                draw->AddText(
-                    {goalTop.x-goalTextSize.x*0.5f,arrowTip.y-72.0f},
-                    IM_COL32(255,245,170,255),goalText);
-                break;
-            }
-        }
     } else if (gameFlowState_ == GameFlowState::Countdown) {
         // カメラがスタート地点へ戻ってから、落ち着いたテンポで開始を数える。
         const float beatDuration=kStartCountdownDuration/3.0f;
@@ -1332,7 +1484,8 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             ImGui::GetFont(),goFontSize,
             {center.x-goSize.x*0.5f,center.y-goSize.y*0.5f},
             IM_COL32(220,255,235,static_cast<int>(alpha*255.0f)),goText);
-    } else if (runtimeMessageTimer_ > 0.0f && !runtimeMessage_.empty()) {
+    } else if (gameFlowState_ != GameFlowState::Title &&
+               runtimeMessageTimer_ > 0.0f && !runtimeMessage_.empty()) {
         const ImVec2 textSize = ImGui::CalcTextSize(runtimeMessage_.c_str());
         const ImVec2 textPosition{x + (width - textSize.x) * 0.5f, y + height * 0.18f};
         draw->AddRectFilled(
@@ -1347,17 +1500,7 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
     if (mode_ == Mode::GamePlay &&
         (gameFlowState_ == GameFlowState::Countdown ||
          gameFlowState_ == GameFlowState::Playing)) {
-        const ImVec2 panelMin{x + width - 204.0f, y + 18.0f};
-        const ImVec2 panelMax{x + width - 18.0f, y + 82.0f};
-        draw->AddRectFilled(panelMin, panelMax, IM_COL32(5, 12, 27, 210), 9.0f);
-        draw->AddRect(panelMin, panelMax, IM_COL32(70, 205, 235, 155), 9.0f, 0, 1.5f);
-        draw->AddText({panelMin.x + 13.0f, panelMin.y + 9.0f},
-            IM_COL32(190, 238, 250, 255), "LIFE");
-
-        char lifeCount[16]{};
-        std::snprintf(lifeCount, sizeof(lifeCount), "x %d", playerLives_);
-        draw->AddText({panelMax.x - 43.0f, panelMin.y + 9.0f},
-            IM_COL32(235, 248, 255, 255), lifeCount);
+        const ImVec2 lifeHudOrigin{x + width - 204.0f, y + 18.0f};
 
         const float changeProgress = lifeChangeTimer_ > 0.0f
             ? 1.0f - lifeChangeTimer_ / kLifeChangeDuration
@@ -1376,8 +1519,8 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             }
 
             const ImVec2 center{
-                panelMin.x + 71.0f + static_cast<float>(i) * 37.0f + shakeX,
-                panelMin.y + 43.0f};
+                lifeHudOrigin.x + 71.0f + static_cast<float>(i) * 37.0f + shakeX,
+                lifeHudOrigin.y + 43.0f};
             const float half = 11.0f * popScale;
             ImU32 fill = activeLife
                 ? IM_COL32(35, 220, 245, 255)
@@ -1421,15 +1564,96 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             }
         }
 
-        if (lifeChangeTimer_ > 0.0f && lifeChangeAmount_ != 0) {
-            const char* changeText = lifeChangeAmount_ > 0 ? "+1" : "-1";
-            const ImU32 changeColor = lifeChangeAmount_ > 0
-                ? IM_COL32(255, 220, 80, static_cast<int>(changeAlpha * 255.0f))
-                : IM_COL32(255, 100, 110, static_cast<int>(changeAlpha * 255.0f));
+        // 鍵付きドアを含むステージだけ、残機の下へ所持鍵を表示する。
+        // 未所持時も暗い輪郭を残し、取得後は金色へ切り替えて探索目的と取得結果を示す。
+        const bool stageUsesKey = std::any_of(
+            placements_.begin(), placements_.end(),
+            [](const Placement& placement) { return placement.itemId == 9; });
+        if (stageUsesKey) {
+            const bool hasKey = keyCount_ > 0;
+            const ImVec2 ringCenter{x + width - 72.0f, y + 123.0f};
+            const ImU32 keyColor = hasKey
+                ? IM_COL32(255, 190, 48, 255)
+                : IM_COL32(70, 82, 101, 195);
+            const ImU32 keyHighlight = hasKey
+                ? IM_COL32(255, 239, 150, 255)
+                : IM_COL32(112, 126, 145, 180);
+            if (hasKey) {
+                const float pulse = 0.5f + 0.5f * std::sin(runtimeTime_ * 4.2f);
+                draw->AddCircle(
+                    ringCenter, 18.0f + pulse * 3.0f,
+                    IM_COL32(255, 190, 48, static_cast<int>(45.0f + pulse * 35.0f)),
+                    20, 5.0f);
+            }
+            draw->AddCircle(ringCenter, 9.0f, keyColor, 16, 5.0f);
+            draw->AddLine(
+                {ringCenter.x, ringCenter.y + 8.0f},
+                {ringCenter.x, ringCenter.y + 30.0f}, keyColor, 6.0f);
+            draw->AddLine(
+                {ringCenter.x, ringCenter.y + 22.0f},
+                {ringCenter.x + 9.0f, ringCenter.y + 22.0f}, keyColor, 5.0f);
+            draw->AddLine(
+                {ringCenter.x, ringCenter.y + 29.0f},
+                {ringCenter.x + 7.0f, ringCenter.y + 29.0f}, keyColor, 5.0f);
+            draw->AddCircle(
+                {ringCenter.x - 2.0f, ringCenter.y - 2.0f},
+                4.5f, keyHighlight, 12, 2.0f);
+
+            char keyCountText[12]{};
+            std::snprintf(keyCountText, sizeof(keyCountText), "x %d", keyCount_);
             draw->AddText(
-                {panelMax.x - 33.0f, panelMax.y + 5.0f - changeProgress * 13.0f},
-                changeColor, changeText);
+                {ringCenter.x + 19.0f, ringCenter.y + 13.0f},
+                hasKey ? IM_COL32(255, 229, 130, 255) : IM_COL32(105, 119, 139, 190),
+                keyCountText);
         }
+
+        // 左下へキーボードと同じ並びでWASDを常時表示する。
+        // 操作開始から10秒後は邪魔にならない濃度へ落とし、いずれかのキー入力中は
+        // UI全体を100%へ戻したうえで、押されているキーだけを強く発光させる。
+        const bool movementInputActive =
+            movementKeyW_ || movementKeyA_ || movementKeyS_ || movementKeyD_;
+        const float movementHudOpacity =
+            (movementHudPlayingTime_ < 10.0f || movementInputActive) ? 1.0f : 0.56f;
+        const auto hudAlpha = [movementHudOpacity](int alpha) {
+            return static_cast<int>(static_cast<float>(alpha) * movementHudOpacity);
+        };
+        const ImVec2 movementOrigin{x + 18.0f, y + height - 124.0f};
+
+        const auto drawMovementKey = [&](const char* label, const ImVec2& center, bool pressed) {
+            constexpr float halfSize = 17.0f;
+            const ImVec2 minimum{center.x - halfSize, center.y - halfSize};
+            const ImVec2 maximum{center.x + halfSize, center.y + halfSize};
+            if (pressed) {
+                draw->AddRect(
+                    {minimum.x - 5.0f, minimum.y - 5.0f},
+                    {maximum.x + 5.0f, maximum.y + 5.0f},
+                    IM_COL32(55, 225, 255, 70), 6.0f, 0, 5.0f);
+                draw->AddRectFilled(
+                    minimum, maximum, IM_COL32(35, 220, 245, 255), 4.0f);
+                draw->AddRect(
+                    minimum, maximum, IM_COL32(215, 255, 255, 255), 4.0f, 0, 2.5f);
+            } else {
+                draw->AddRectFilled(
+                    minimum, maximum, IM_COL32(25, 38, 58, hudAlpha(225)), 4.0f);
+                draw->AddRect(
+                    minimum, maximum, IM_COL32(92, 154, 178, hudAlpha(205)), 4.0f, 0, 1.5f);
+            }
+            const ImVec2 textSize = ImGui::CalcTextSize(label);
+            draw->AddText(
+                {center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f},
+                pressed
+                    ? IM_COL32(5, 31, 46, 255)
+                    : IM_COL32(210, 238, 246, hudAlpha(245)),
+                label);
+        };
+
+        const float keyLeft = movementOrigin.x + 28.0f;
+        const float keyTop = movementOrigin.y + 27.0f;
+        constexpr float keyStep = 40.0f;
+        drawMovementKey("W", {keyLeft + keyStep, keyTop}, movementKeyW_);
+        drawMovementKey("A", {keyLeft, keyTop + keyStep}, movementKeyA_);
+        drawMovementKey("S", {keyLeft + keyStep, keyTop + keyStep}, movementKeyS_);
+        drawMovementKey("D", {keyLeft + keyStep * 2.0f, keyTop + keyStep}, movementKeyD_);
     }
 
     // 小型ブロックが画面奥から飛来して一枚の壁を組み上げ、完全に隠れた瞬間に
@@ -1782,9 +2006,27 @@ void StageEditor::UpdateGameFlow(Input* input) {
         kStartTransitionBuildDuration + kStartTransitionLoadingDuration;
     startGoTimer_=(std::max)(0.0f,startGoTimer_-deltaTime);
 
-    // プレイ中・導入演出中・画面遷移中のどこからでもEscでタイトルへ戻す。
-    // タイトル画面上ではEscを消費せず、既存のウィンドウ操作へ影響させない。
-    if (gameFlowState_ != GameFlowState::Title && input->TriggerKey(DIK_ESCAPE)) {
+    const bool escapePressed = input->TriggerKey(DIK_ESCAPE);
+#ifdef PLAYER_RELEASE
+    if (escapePressed && gameFlowState_ == GameFlowState::Pause) {
+        gameFlowState_ = pauseReturnState_;
+        status_ = "Pause closed";
+        return;
+    }
+    if (escapePressed &&
+        (gameFlowState_ == GameFlowState::IntroCamera ||
+         gameFlowState_ == GameFlowState::Countdown ||
+         gameFlowState_ == GameFlowState::Playing)) {
+        pauseReturnState_ = gameFlowState_;
+        selectedPauseOption_ = 0;
+        pauseMenuPulseTimer_ = 0.0f;
+        gameFlowState_ = GameFlowState::Pause;
+        status_ = "Pause opened";
+        return;
+    }
+#endif
+    // セレクトや遷移中からのEscは従来どおりタイトルへ戻す。
+    if ((gameFlowState_ != GameFlowState::Title || startTransitionActive_) && escapePressed) {
         ResetRuntimeState();
         gameFlowState_ = GameFlowState::Title;
         titleLetterAnimationTimer_ = 0.0f;
@@ -1795,6 +2037,43 @@ void StageEditor::UpdateGameFlow(Input* input) {
         status_ = "Returned to title";
         return;
     }
+
+#ifdef PLAYER_RELEASE
+    if (gameFlowState_ == GameFlowState::Pause) {
+        const bool selectUp = input->TriggerKey(DIK_W) ||
+            input->TriggerKey(DIK_UP) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_UP);
+        const bool selectDown = input->TriggerKey(DIK_S) ||
+            input->TriggerKey(DIK_DOWN) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_DOWN);
+        if (selectUp) selectedPauseOption_ = 0;
+        if (selectDown) selectedPauseOption_ = 1;
+
+        const bool pauseAccept = input->TriggerKey(DIK_RETURN) ||
+            input->TriggerKey(DIK_SPACE) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+        if (pauseAccept && selectedPauseOption_ == 0) {
+            const int stageIndex = std::clamp(selectedReleaseStage_, 0, 1);
+            if (LoadStage(kReleaseStagePaths[stageIndex])) {
+                gameFlowState_ = GameFlowState::Countdown;
+                startCountdownTimer_ = 0.0f;
+                countdownImpactBeat_ = -1;
+                countdownImpactEmitted_ = false;
+                suppressStartJumpUntilReleased_ = true;
+                status_ = std::string("Restarted: ") + kReleaseStageLabels[stageIndex];
+            } else {
+                gameFlowState_ = GameFlowState::Pause;
+                ShowRuntimeMessage("STAGE LOAD FAILED", 1.5f);
+            }
+        } else if (pauseAccept && selectedPauseOption_ == 1) {
+            ResetRuntimeState();
+            gameFlowState_ = GameFlowState::StageSelect;
+            stageSelectPulseTimer_ = 0.0f;
+            status_ = "Returned to stage select";
+        }
+        return;
+    }
+#endif
 
     // フェードの中央（画面が完全に黒い瞬間）でタイトルからゲームへ切り替える。
     // 演出中は追加の決定入力を受け付けず、二重開始を防止する。
@@ -1818,6 +2097,39 @@ void StageEditor::UpdateGameFlow(Input* input) {
         return;
     }
 
+#ifdef PLAYER_RELEASE
+    if (gameFlowState_ == GameFlowState::StageSelect) {
+        const bool selectLeft = input->TriggerKey(DIK_A) ||
+            input->TriggerKey(DIK_LEFT) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_LEFT);
+        const bool selectRight = input->TriggerKey(DIK_D) ||
+            input->TriggerKey(DIK_RIGHT) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_RIGHT);
+        if (selectLeft) selectedReleaseStage_ = 0;
+        if (selectRight) selectedReleaseStage_ = 1;
+
+        const bool selectAccept = input->TriggerKey(DIK_RETURN) ||
+            input->TriggerKey(DIK_SPACE) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+        if (selectAccept) {
+            const int stageIndex = std::clamp(selectedReleaseStage_, 0, 1);
+            if (LoadStage(kReleaseStagePaths[stageIndex])) {
+                // ロード直後は選択画面のまま保持し、ブロック壁が完成した中央で
+                // IntroCameraへ切り替えることでステージ画像の先行表示を防ぐ。
+                gameFlowState_ = GameFlowState::StageSelect;
+                startTransitionActive_ = true;
+                startTransitionContinue_ = false;
+                suppressStartJumpUntilReleased_ = true;
+                status_ = std::string("Release stage selected: ") +
+                    kReleaseStageLabels[stageIndex];
+            } else {
+                ShowRuntimeMessage("STAGE LOAD FAILED", 1.5f);
+            }
+        }
+        return;
+    }
+#endif
+
     if (gameFlowState_ == GameFlowState::IntroCamera) {
         // ステージ紹介中はカメラだけを移動させる。
         // 自機はスタート地点へ固定し、カメラ演出や直前の入力状態によって
@@ -1827,10 +2139,7 @@ void StageEditor::UpdateGameFlow(Input* input) {
         playerVelocity_ = {};
         playerGrounded_ = false;
         if (playerObject_) {
-            playerObject_->SetPosition(playerPosition_);
-            playerObject_->SetRotation({});
-            playerObject_->SetScale({1.0f, 1.0f, 1.0f});
-            playerObject_->Update();
+            ApplyPlayerVisualTransform();
         }
 
         const bool skipIntro=introCameraSeen_ && (
@@ -1896,6 +2205,14 @@ void StageEditor::UpdateGameFlow(Input* input) {
     const bool continueGame = input->TriggerKey(DIK_C) ||
         input->TriggerGamepadButton(XINPUT_GAMEPAD_Y);
     if (gameFlowState_ == GameFlowState::Title) {
+#ifdef PLAYER_RELEASE
+        if (accept) {
+            selectedReleaseStage_ = 0;
+            gameFlowState_ = GameFlowState::StageSelect;
+            titleStartParticles_.clear();
+            status_ = "Stage select opened";
+        }
+#else
         if (continueGame && hasSaveData_) {
             ResetRuntimeState();
             // ステージ読込はフェード開始前に完了させる。
@@ -1914,6 +2231,7 @@ void StageEditor::UpdateGameFlow(Input* input) {
             startTransitionContinue_ = false;
             suppressStartJumpUntilReleased_ = true;
         }
+#endif
     } else if (gameFlowState_ == GameFlowState::Clear) {
         // クリア結果を確認できる時間を確保した後、自動でタイトルへ戻す。
         // リトライとタイトル復帰をキーで選ばせず、ゲームループを
@@ -1955,12 +2273,24 @@ void StageEditor::ResetRuntimeState() {
     lifeChangeAmount_ = 0;
     lifeChangedSlot_ = -1;
     lifeChangeTimer_ = 0.0f;
+    movementHudPlayingTime_ = 0.0f;
+    movementKeyW_ = false;
+    movementKeyA_ = false;
+    movementKeyS_ = false;
+    movementKeyD_ = false;
     respawnEffectActive_ = false;
     respawnEffectFromFall_ = false;
     respawnEffectTimer_ = 0.0f;
     respawnEffectOrigin_ = {};
     playerFlashTimer_ = 0.0f;
     playerDamageCooldown_ = 0.0f;
+    playerFacingDirection_ = 1;
+    playerFacingTarget_ = 1;
+    playerFacingAngle_ = 0.0f;
+    playerTurnStartAngle_ = 0.0f;
+    playerTurnTargetAngle_ = 0.0f;
+    playerTurnTimer_ = kPlayerTurnDuration;
+    playerTurnLean_ = 0.0f;
     runtimeMessage_.clear();
     collectedStars_ = 0;
     collectedBubbles_ = 0;
@@ -1973,16 +2303,19 @@ void StageEditor::ResetRuntimeState() {
     runtimePlacementTouching_.assign(placements_.size(), 0);
     runtimePlacementPositions_.resize(placements_.size());
     runtimeEnemyDirections_.assign(placements_.size(), 1.0f);
+    runtimeEnemyFacingAngles_.assign(placements_.size(), 0.0f);
     runtimeEnemyAlerted_.assign(placements_.size(), 0);
     runtimeFallingFloorStates_.assign(placements_.size(), 0);
     runtimeFallingFloorTimers_.assign(placements_.size(), 0.0f);
     runtimeFallingFloorVelocities_.assign(placements_.size(), 0.0f);
+    runtimeJumpPadTimers_.assign(placements_.size(), 0.0f);
     runtimeSavePointUsed_.assign(placements_.size(), 0);
 
     playerRespawnPosition_ = GridToWorld(1, 2);
     for (size_t i = 0; i < placements_.size(); ++i) {
         runtimePlacementPositions_[i] = placements_[i].position;
         runtimeEnemyDirections_[i] = (i % 2 == 0) ? 1.0f : -1.0f;
+        runtimeEnemyFacingAngles_[i] = runtimeEnemyDirections_[i] > 0.0f ? 0.0f : kPi;
         if (placements_[i].itemId == 25) playerRespawnPosition_ = placements_[i].position;
         if (placements_[i].itemId == 5) runtimePlacementActive_[i] = 0;
         // 新規ゲームでは使用済み表示も初期色へ戻す。
@@ -1990,6 +2323,10 @@ void StageEditor::ResetRuntimeState() {
             i < objects_.size() && objects_[i]) {
             if (const ItemDefinition* definition=FindItem(placements_[i].itemId)) {
                 objects_[i]->SetColor(definition->color);
+            }
+            if (placements_[i].itemId == 31) {
+                objects_[i]->SetModel(ModelManager::Load(
+                    "Resources/System/PrismSaveFlag", "prism_save_flag_inactive.obj"));
             }
         }
     }
@@ -2008,10 +2345,7 @@ void StageEditor::RespawnPlayer(bool damaged) {
     playerDamageCooldown_ = damaged ? 1.0f : 0.0f;
     if (damaged) ShowRuntimeMessage("DAMAGE!  RESPAWN", 1.2f);
     if (playerObject_) {
-        playerObject_->SetPosition(playerPosition_);
-        playerObject_->SetRotation({});
-        playerObject_->SetScale({1.0f,1.0f,1.0f});
-        playerObject_->Update();
+        ApplyPlayerVisualTransform();
     }
 }
 
@@ -2251,7 +2585,13 @@ bool StageEditor::LoadSavedProgress() {
                 for (size_t i=0;i<placements_.size();++i) {
                     if (placements_[i].id!=id||i>=runtimeSavePointUsed_.size()) continue;
                     runtimeSavePointUsed_[i]=1;
-                    if (i<objects_.size()&&objects_[i]) objects_[i]->SetColor({1.0f,0.9f,0.2f,1.0f});
+                    if (i<objects_.size()&&objects_[i]&&placements_[i].itemId==31) {
+                        objects_[i]->SetModel(ModelManager::Load(
+                            "Resources/System/PrismSaveFlag", "prism_save_flag_active.obj"));
+                        objects_[i]->SetColor({1.0f,1.0f,1.0f,1.0f});
+                    } else if (i<objects_.size()&&objects_[i]&&placements_[i].itemId==26) {
+                        objects_[i]->SetColor({1.0f,0.85f,0.15f,1.0f});
+                    }
                     break;
                 }
             }
@@ -2261,7 +2601,13 @@ bool StageEditor::LoadSavedProgress() {
             for (size_t i=0;i<placements_.size();++i) {
                 if (placements_[i].id==savedPointId&&i<runtimeSavePointUsed_.size()) {
                     runtimeSavePointUsed_[i]=1;
-                    if (i<objects_.size()&&objects_[i]) objects_[i]->SetColor({1.0f,0.9f,0.2f,1.0f});
+                    if (i<objects_.size()&&objects_[i]&&placements_[i].itemId==31) {
+                        objects_[i]->SetModel(ModelManager::Load(
+                            "Resources/System/PrismSaveFlag", "prism_save_flag_active.obj"));
+                        objects_[i]->SetColor({1.0f,1.0f,1.0f,1.0f});
+                    } else if (i<objects_.size()&&objects_[i]&&placements_[i].itemId==26) {
+                        objects_[i]->SetColor({1.0f,0.85f,0.15f,1.0f});
+                    }
                     break;
                 }
             }
@@ -2407,21 +2753,62 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
                 playerPosition_.y += position.y - previousPosition.y;
             }
             if (i < objects_.size() && objects_[i]) {
-                objects_[i]->SetColor(state == 1
-                    ? Vector4{1.0f,0.2f,0.08f,1.0f}
-                    : Vector4{0.82f,0.48f,0.18f,1.0f});
+                const char* visualFile = state == 1
+                    ? "falling_ruin_warning.obj"
+                    : (state == 2 ? "falling_ruin_broken.obj" : "falling_ruin_idle.obj");
+                objects_[i]->SetModel(ModelManager::Load("Resources/Block/FallingRuin", visualFile));
+                // 状態色をモデル全体へ乗算せず、手描き調の石材色と亀裂色をそのまま表示する。
+                objects_[i]->SetColor({1.0f,1.0f,1.0f,1.0f});
+            }
+        } else if (itemId == 29 && i < runtimeJumpPadTimers_.size()) {
+            constexpr float animationDuration = 0.46f;
+            float& timer = runtimeJumpPadTimers_[i];
+            timer = (std::max)(0.0f, timer - deltaTime);
+            const float elapsed = animationDuration - timer;
+
+            const char* visualFile = "prism_spring_pad_idle.obj";
+            if (timer > 0.0f) {
+                // 着地直後に一度沈み、その後すばやく上へ伸びてから通常形状へ戻す。
+                visualFile = elapsed < 0.09f
+                    ? "prism_spring_pad_compressed.obj"
+                    : (elapsed < 0.25f ? "prism_spring_pad_launch.obj" : "prism_spring_pad_idle.obj");
+            } else {
+                // 待機中も発光コアが呼吸しているように、ごく小さく上下させる。
+                position.y += std::sin(runtimeTime_ * 3.2f + static_cast<float>(i) * 0.61f) * 0.008f;
+            }
+            if (i < objects_.size() && objects_[i]) {
+                objects_[i]->SetModel(ModelManager::Load("Resources/Gimmick/PrismSpringPad", visualFile));
+                objects_[i]->SetColor({1.0f,1.0f,1.0f,1.0f});
+            }
+        } else if (itemId == 31) {
+            const bool used = i < runtimeSavePointUsed_.size() && runtimeSavePointUsed_[i] != 0;
+            const char* visualFile = used
+                ? "prism_save_flag_active.obj"
+                : "prism_save_flag_inactive.obj";
+            if (i < objects_.size() && objects_[i]) {
+                objects_[i]->SetModel(ModelManager::Load("Resources/System/PrismSaveFlag", visualFile));
+                objects_[i]->SetColor({1.0f,1.0f,1.0f,1.0f});
             }
         }
         runtimePlacementPositions_[i] = position;
         if (i < objects_.size() && objects_[i]) {
             ApplyPlacementVisualTransform(objects_[i].get(), placements_[i], position);
+            if ((itemId == 22 || itemId == 23) && i < runtimeEnemyFacingAngles_.size()) {
+                Vector3 rotation = GetPlacementModelRotation(placements_[i]);
+                rotation.y += runtimeEnemyFacingAngles_[i];
+                objects_[i]->SetRotation(rotation);
+            }
         }
     }
 
     if (playerObject_) {
         const Vector4 color = goalReached_
-            ? Vector4{0.2f,1.0f,0.35f,1.0f}
-            : (playerFlashTimer_ > 0.0f ? Vector4{1.0f,0.15f,0.12f,1.0f} : Vector4{0.12f,0.55f,1.0f,1.0f});
+            ? Vector4{1.0f,0.82f,0.34f,1.0f}
+            : (playerFlashTimer_ > 0.0f
+                ? Vector4{1.0f,0.28f,0.24f,1.0f}
+                : (!playerGrounded_ && playerVelocity_.y > 0.1f
+                    ? Vector4{0.82f,0.68f,1.0f,1.0f}
+                    : Vector4{1.0f,1.0f,1.0f,1.0f}));
         playerObject_->SetColor(color);
     }
 }
@@ -2448,6 +2835,12 @@ void StageEditor::UpdateEnemies(float deltaTime) {
     if (goalReached_) return;
     if (runtimeEnemyDirections_.size() != placements_.size()) {
         runtimeEnemyDirections_.assign(placements_.size(), 1.0f);
+    }
+    if (runtimeEnemyFacingAngles_.size() != placements_.size()) {
+        runtimeEnemyFacingAngles_.resize(placements_.size(), 0.0f);
+        for (size_t i = 0; i < placements_.size(); ++i) {
+            runtimeEnemyFacingAngles_[i] = runtimeEnemyDirections_[i] > 0.0f ? 0.0f : kPi;
+        }
     }
     if (runtimeEnemyAlerted_.size() != placements_.size()) {
         runtimeEnemyAlerted_.assign(placements_.size(), 0);
@@ -2481,12 +2874,19 @@ void StageEditor::UpdateEnemies(float deltaTime) {
             } else {
                 position = candidate;
             }
+
         } else if (placement.itemId == 23) { // Flyer: loops around its saved spawn point.
             const float phase = static_cast<float>(i) * 0.73f;
             Vector3 candidate = placement.position;
             candidate.x += std::sin(runtimeTime_ * 1.25f + phase) * 2.0f;
             candidate.y += std::sin(runtimeTime_ * 2.1f + phase) * 0.65f;
-            if (!IsPlacementBlocked(candidate, halfX, halfY)) position = candidate;
+            if (!IsPlacementBlocked(candidate, halfX, halfY)) {
+                const float horizontalVelocity = std::cos(runtimeTime_ * 1.25f + phase) * 2.5f;
+                if (std::abs(horizontalVelocity) > 0.025f) {
+                    runtimeEnemyDirections_[i] = horizontalVelocity > 0.0f ? 1.0f : -1.0f;
+                }
+                position = candidate;
+            }
         } else { // Chaser: detects the player, pursues, then returns to its spawn point.
             constexpr float detectDistance = 7.0f;
             constexpr float loseDistance = 9.0f;
@@ -2521,6 +2921,18 @@ void StageEditor::UpdateEnemies(float deltaTime) {
                     ? Vector4{1.0f,0.9f,0.1f,1.0f}
                     : Vector4{0.95f,0.12f,0.12f,1.0f});
             }
+        }
+
+        if (placement.itemId == 22 || placement.itemId == 23) {
+            // +X正面のモデルをY軸回転で反転する。負のスケールを使わないため、
+            // 振り向き途中に薄く消えたり法線が裏返ったりしない。
+            const float targetAngle = runtimeEnemyDirections_[i] > 0.0f ? 0.0f : kPi;
+            float angleDelta = targetAngle - runtimeEnemyFacingAngles_[i];
+            while (angleDelta > kPi) angleDelta -= kPi * 2.0f;
+            while (angleDelta < -kPi) angleDelta += kPi * 2.0f;
+            const float turnDuration = placement.itemId == 23 ? 0.24f : 0.20f;
+            const float turnBlend = (std::min)(1.0f, deltaTime / turnDuration);
+            runtimeEnemyFacingAngles_[i] += angleDelta * turnBlend;
         }
 
         runtimePlacementPositions_[i] = position;
@@ -2607,7 +3019,8 @@ void StageEditor::ResolvePlacedSolidCollisions() {
     for (size_t i = 0; i < placements_.size(); ++i) {
         if (!IsRuntimePlacementActive(i)) continue;
         const int itemId = placements_[i].itemId;
-        if (itemId != 4 && itemId != 5 && itemId != 8 && itemId != 9 && itemId != 10 && itemId != 28 && itemId != 30) continue;
+        if (itemId != 4 && itemId != 5 && itemId != 8 && itemId != 9 && itemId != 10 &&
+            itemId != 28 && itemId != 29 && itemId != 30) continue;
 
         if (itemId == 28) {
             // 崩れる床には通常の箱型押し出しを使わず、上面だけの一方向床判定を使う。
@@ -2680,11 +3093,11 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
         if (!touching) continue;
 
         switch (itemId) {
-        case 9: // Key Block
+        case 9: // Prism Locked Door
             if (keyCount_ > 0) {
                 --keyCount_;
                 runtimePlacementActive_[i] = 0;
-                ShowRuntimeMessage("KEY BLOCK OPEN", 1.2f);
+                ShowRuntimeMessage("LOCKED DOOR OPEN", 1.2f);
             } else if (!wasTouching) {
                 ShowRuntimeMessage("A KEY IS REQUIRED", 1.2f);
             }
@@ -2769,12 +3182,33 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
         case 29: { // Jump Pad
             const Vector3 padPosition = GetRuntimePlacementPosition(i);
             const float padHalfY = GetPlacementHalfExtents(placements_[i]).y;
-            // Activate only while landing from above; side and underside
-            // contacts must not unexpectedly launch the player.
-            if (playerPosition_.y >= padPosition.y && playerVelocity_.y <= 0.0f) {
-                playerPosition_.y = padPosition.y + padHalfY + kPlayerHalfSize + 0.001f;
+            const float padTop = padPosition.y + padHalfY;
+            const float playerBottom = playerPosition_.y - kPlayerHalfSize;
+            const float previousPlayerBottom = playerBottom - playerVelocity_.y * deltaTime;
+            const bool overlapsPadWidth =
+                std::abs(playerPosition_.x - padPosition.x) <
+                kPlayerHalfSize + GetPlacementHalfExtents(placements_[i]).x - 0.02f;
+            const bool standingOnTop =
+                std::abs(playerBottom - padTop) <= 0.06f &&
+                overlapsPadWidth;
+            const bool crossedTopSurface =
+                overlapsPadWidth &&
+                previousPlayerBottom >= padTop - 0.02f &&
+                playerBottom <= padTop + 0.06f &&
+                playerPosition_.y >= padPosition.y;
+            const bool ready = i >= runtimeJumpPadTimers_.size() ||
+                runtimeJumpPadTimers_[i] <= 0.0f;
+
+            // 側面は通常の固体衝突で止め、上面へ着地した足元だけを発動条件にする。
+            // 中心座標だけで判定すると横から入った時にも高さ次第で誤発動するため、
+            // パッド上面とプレイヤーの足元の距離を直接比較する。
+            if ((standingOnTop || crossedTopSurface) && ready && playerVelocity_.y <= 0.0f) {
+                playerPosition_.y = padTop + kPlayerHalfSize + 0.001f;
                 playerVelocity_.y = kPlayerJumpSpeed * 1.55f;
                 playerGrounded_ = false;
+                if (i < runtimeJumpPadTimers_.size()) {
+                    runtimeJumpPadTimers_[i] = 0.46f;
+                }
                 ShowRuntimeMessage("JUMP PAD!", 0.7f);
             }
             break;
@@ -2815,7 +3249,6 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
                 // 保存処理の前にフラグを立てる。保存失敗時は再試行できるよう戻す。
                 runtimeSavePointUsed_[i] = 1;
                 if (SaveProgressAt(i)) {
-                    if (i < objects_.size() && objects_[i]) objects_[i]->SetColor({1.0f,0.9f,0.2f,1.0f});
                     ShowRuntimeMessage("GAME SAVED!", 1.5f);
                 } else {
                     runtimeSavePointUsed_[i] = 0;
@@ -2830,6 +3263,56 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
 
 // 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
 // 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
+void StageEditor::UpdatePlayerFacingVisual(float moveInput, float deltaTime) {
+    constexpr float inputThreshold = 0.15f;
+    if (std::abs(moveInput) > inputThreshold) {
+        const int requestedDirection = moveInput > 0.0f ? 1 : -1;
+        if (requestedDirection != playerFacingTarget_) {
+            playerFacingTarget_ = requestedDirection;
+            playerTurnStartAngle_ = playerFacingAngle_;
+            playerTurnTargetAngle_ = requestedDirection > 0
+                ? 0.0f
+                : 3.14159265358979323846f;
+            playerTurnTimer_ = 0.0f;
+        }
+    }
+
+    if (playerFacingDirection_ == playerFacingTarget_ &&
+        playerTurnTimer_ >= kPlayerTurnDuration) {
+        playerFacingAngle_ = playerTurnTargetAngle_;
+        playerTurnLean_ = 0.0f;
+        return;
+    }
+
+    playerTurnTimer_ = (std::min)(playerTurnTimer_ + deltaTime, kPlayerTurnDuration);
+    const float progress = std::clamp(playerTurnTimer_ / kPlayerTurnDuration, 0.0f, 1.0f);
+    const auto smoothStep = [](float value) {
+        value = std::clamp(value, 0.0f, 1.0f);
+        return value * value * (3.0f - 2.0f * value);
+    };
+
+    const float eased = smoothStep(progress);
+    playerFacingAngle_ = playerTurnStartAngle_ +
+        (playerTurnTargetAngle_ - playerTurnStartAngle_) * eased;
+    // 方向転換中に進行方向へわずかに身体を倒し、機械的な回転を和らげる。
+    playerTurnLean_ = -static_cast<float>(playerFacingTarget_) *
+        std::sin(progress * 3.14159265358979323846f) * 0.045f;
+
+    if (progress >= 1.0f) {
+        playerFacingDirection_ = playerFacingTarget_;
+        playerFacingAngle_ = playerTurnTargetAngle_;
+        playerTurnLean_ = 0.0f;
+    }
+}
+
+void StageEditor::ApplyPlayerVisualTransform() {
+    if (!playerObject_) return;
+    playerObject_->SetPosition(playerPosition_);
+    playerObject_->SetRotation({0.0f, playerFacingAngle_, playerTurnLean_});
+    playerObject_->SetScale({1.0f, 1.0f, 1.0f});
+    playerObject_->Update();
+}
+
 void StageEditor::UpdatePlayer(Input* input) {
     constexpr float deltaTime = 1.0f / 60.0f;
     if (respawnEffectActive_) {
@@ -2862,6 +3345,8 @@ void StageEditor::UpdatePlayer(Input* input) {
                 input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
         }
     }
+
+    UpdatePlayerFacingVisual(moveInput, deltaTime);
 
     if (goalReached_) {
         playerVelocity_ = {};
@@ -2930,9 +3415,7 @@ void StageEditor::UpdatePlayer(Input* input) {
         return;
     }
     if (playerObject_) {
-        playerObject_->SetPosition(playerPosition_);
-        playerObject_->SetScale({1.0f,1.0f,1.0f});
-        playerObject_->Update();
+        ApplyPlayerVisualTransform();
     }
 }
 
@@ -2971,7 +3454,9 @@ void StageEditor::RemoveNearest(){
     if (tileIndex >= 0 && tiles_[tileIndex] != 0) {
         PushUndo(); tiles_[tileIndex] = 0; if(tileIndex<static_cast<int>(tileObjects_.size()))tileObjects_[tileIndex].reset(); status_="Removed tile"; return;
     }
-    const int index=FindNearestPlacement(0.25f); if(index<0){status_="No object at cursor";return;}
+    // JSONから読み込んだ旧配置に小さな座標ずれが残っていても、同じグリッドセル内なら
+    // 削除できるよう半径をセル対角の半分より少し広くする。隣接セルの中心までは届かない。
+    const int index=FindNearestPlacement(0.75f); if(index<0){status_="No object at cursor";return;}
     PushUndo(); placements_.erase(placements_.begin()+index); objects_.erase(objects_.begin()+index); status_="Removed nearest object";
 }
 

@@ -1,0 +1,12 @@
+# Blender 4.4.1 MTL File: 'prism_glider.blend'
+# www.blender.org
+
+newmtl PrismGliderMaterial
+Ns 176.400024
+Ka 0.280000 0.280000 0.280000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 3
+map_Kd prism_glider.png

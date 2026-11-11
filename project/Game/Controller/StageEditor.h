@@ -24,7 +24,7 @@ public:
     static constexpr float kTileWorldSize = 1.0f;
 
     enum class Mode { Editor, GamePlay };
-    enum class GameFlowState { Title, IntroCamera, Countdown, Playing, Clear, GameOver };
+    enum class GameFlowState { Title, StageSelect, IntroCamera, Countdown, Playing, Pause, Clear, GameOver };
     enum class Category { Basic, Gimmick, Enemy, System };
     enum class TileCollisionType { Empty, Solid, OneWay, Ladder, SlopeUpRight, SlopeUpLeft };
 
@@ -156,6 +156,8 @@ private:
     void UpdateRespawnEffect(float deltaTime);
     void ChangePlayerLives(int amount);
     void UpdatePlayer(Input* input);
+    void UpdatePlayerFacingVisual(float moveInput, float deltaTime);
+    void ApplyPlayerVisualTransform();
     void UpdateGameFlow(Input* input);
     void EmitTitleStartParticles();
     void EmitCountdownImpactParticles(int count);
@@ -243,11 +245,21 @@ private:
     std::unique_ptr<Object3d> cursorObject_;
     std::unique_ptr<Object3d> cursorFrameObject_;
     std::unique_ptr<Object3d> playerObject_;
+    std::unique_ptr<Object3d> goalPreviewArrowObject_;
+    std::unique_ptr<Object3d> goalPreviewLabelObject_;
     // 1文字ずつ奥から登場させる「PRISM PASSAGE」の3Dブロック文字。
     std::vector<std::unique_ptr<Object3d>> titleLetterObjects_;
     float titleLetterAnimationTimer_ = 0.0f;
     // ゲーム名の下で点滅する「PRESS ENTER」の3Dブロック文字。
     std::unique_ptr<Object3d> titlePromptObject_;
+    std::unique_ptr<Object3d> stageSelectStage1Object_;
+    std::unique_ptr<Object3d> stageSelectStage2Object_;
+    float stageSelectPulseTimer_ = 0.0f;
+    std::unique_ptr<Object3d> pauseRestartObject_;
+    std::unique_ptr<Object3d> pauseBackToSelectObject_;
+    GameFlowState pauseReturnState_ = GameFlowState::Playing;
+    int selectedPauseOption_ = 0;
+    float pauseMenuPulseTimer_ = 0.0f;
     // 開始カウント用の立体ブロック数字。添字0から「1」「2」「3」の順で保持する。
     std::vector<std::unique_ptr<Object3d>> countdownDigitObjects_;
     std::vector<TitleStartParticle> titleStartParticles_;
@@ -263,6 +275,16 @@ private:
 
     Vector3 playerPosition_{1.5f, 2.5f, 0.0f};
     Vector3 playerVelocity_{};
+    // +1を右向き、-1を左向きとして保持する。横幅を反転させず、
+    // Y軸回転で背中を経由する立体的な方向転換を行う。
+    int playerFacingDirection_ = 1;
+    int playerFacingTarget_ = 1;
+    float playerFacingAngle_ = 0.0f;
+    float playerTurnStartAngle_ = 0.0f;
+    float playerTurnTargetAngle_ = 0.0f;
+    float playerTurnTimer_ = 0.18f;
+    float playerTurnLean_ = 0.0f;
+    static constexpr float kPlayerTurnDuration = 0.18f;
     static constexpr float kPlayerHalfSize = 0.5f;
     static constexpr float kPlayerMoveSpeed = 5.0f;
     static constexpr float kPlayerJumpSpeed = 9.0f;
@@ -276,10 +298,14 @@ private:
     std::vector<uint8_t> runtimePlacementTouching_;
     std::vector<Vector3> runtimePlacementPositions_;
     std::vector<float> runtimeEnemyDirections_;
+    // Walkerの見た目の向き。移動方向とは分離し、反転時に補間する。
+    std::vector<float> runtimeEnemyFacingAngles_;
     std::vector<uint8_t> runtimeEnemyAlerted_;
     std::vector<uint8_t> runtimeFallingFloorStates_;
     std::vector<float> runtimeFallingFloorTimers_;
     std::vector<float> runtimeFallingFloorVelocities_;
+    // ジャンプパッドごとの踏み込み・反発アニメーション残り時間。
+    std::vector<float> runtimeJumpPadTimers_;
     // Checkpoint / Save Pointが一度使用されたかを配置インデックス単位で保持する。
     std::vector<uint8_t> runtimeSavePointUsed_;
     std::vector<uint8_t> runtimeTileActive_;
@@ -329,6 +355,12 @@ private:
     int lifeChangedSlot_ = -1;
     float lifeChangeTimer_ = 0.0f;
     static constexpr float kLifeChangeDuration = 0.9f;
+    // 左下の移動操作HUD。プレイ開始10秒後は薄くし、WASD入力中だけ再び強調する。
+    float movementHudPlayingTime_ = 0.0f;
+    bool movementKeyW_ = false;
+    bool movementKeyA_ = false;
+    bool movementKeyS_ = false;
+    bool movementKeyD_ = false;
     std::string runtimeMessage_;
     int collectedStars_ = 0;
     int collectedBubbles_ = 0;
@@ -337,6 +369,8 @@ private:
     bool onOffActive_ = true;
     bool goalReached_ = false;
     GameFlowState gameFlowState_ = GameFlowState::Title;
+    // Release版ステージセレクトで選択しているカード（0: Stage 1, 1: Stage 2）。
+    int selectedReleaseStage_ = 0;
     float titlePromptBlinkTimer_ = 0.0f;
     bool hasSaveData_ = false;
     static constexpr const char* kProgressSavePath = "SaveData/stage_progress.json";
