@@ -177,6 +177,8 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
     object3dCommon_=common;
     environmentTexture_=environmentTexture;
     environmentCoefficient_=environmentCoefficient;
+    stageObjectFactory_ = std::make_unique<ModelStageObjectFactory>(
+        object3dCommon_, environmentTexture_, environmentCoefficient_);
 #if !defined(USE_IMGUI) || defined(PLAYER_RELEASE)
     // Release builds do not provide the editor UI, so starting in Editor
     // mode would leave the placement cursor visible with no way to enter
@@ -448,6 +450,7 @@ void StageEditor::Finalize() {
     tileObjects_.clear();
     objects_.clear();
     placements_.clear();
+    stageObjectFactory_.reset();
     object3dCommon_=nullptr;
 }
 
@@ -3845,20 +3848,17 @@ void StageEditor::ApplyPlacementVisualTransform(
 // 処理概要: 担当機能で使用するオブジェクトまたはGPUリソースを生成する。
 // 注意事項: 生成条件、所有者、破棄タイミングを明確にする。
 std::unique_ptr<Object3d> StageEditor::CreateObject(const Placement& p) const {
-    const ItemDefinition* item=FindItem(p.itemId); if(!item||!object3dCommon_)return nullptr;
-    Model* model=ModelManager::Load(item->modelDirectory,item->modelFile);
-    auto object=std::make_unique<Object3d>(); object->Initialize(object3dCommon_); object->SetModel(model);
-    ApplyPlacementVisualTransform(object.get(), p, p.position); object->SetColor(item->color);
-    object->SetEnvironmentTexture(environmentTexture_); object->SetEnvironmentCoefficient(environmentCoefficient_);
+    const ItemDefinition* item = FindItem(p.itemId);
+    if (!item || !stageObjectFactory_) return nullptr;
 
-    // StageEditorの入力処理は3D描画より先に実行されるため、配置したオブジェクトは
-    // 生成された同じフレームからDraw3D()の描画対象になる。
-    // 初回Update()を行わないとGPUへ渡すWVP行列が単位行列のままになり、
-    // 1フレームだけモデルが画面中央へ巨大な2D画像のように表示されてしまう。
-    // 生成時点でTransformをGPU用定数バッファへ反映し、最初の描画から正しい位置にする。
-    object->Update();
-
-    return object;
+    StageObjectCreateInfo createInfo{};
+    createInfo.modelDirectory = item->modelDirectory;
+    createInfo.modelFile = item->modelFile;
+    createInfo.position = GetPlacementModelPosition(p, p.position);
+    createInfo.rotation = GetPlacementModelRotation(p);
+    createInfo.scale = GetPlacementModelScale(p);
+    createInfo.color = item->color;
+    return stageObjectFactory_->Create(createInfo);
 }
 
 // 処理概要: StageEditorが担当する「RebuildObjects」処理を実行する。
