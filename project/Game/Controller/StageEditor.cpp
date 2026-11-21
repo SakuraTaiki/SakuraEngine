@@ -2648,9 +2648,8 @@ void StageEditor::ResetRuntimeState() {
     runtimePlacementPositions_.resize(placements_.size());
     runtimeEnemyBehaviors_.clear();
     runtimeEnemyBehaviors_.resize(placements_.size());
-    runtimeFallingFloorStates_.assign(placements_.size(), 0);
-    runtimeFallingFloorTimers_.assign(placements_.size(), 0.0f);
-    runtimeFallingFloorVelocities_.assign(placements_.size(), 0.0f);
+    runtimeFallingFloors_.clear();
+    runtimeFallingFloors_.resize(placements_.size());
     runtimeJumpPadTimers_.assign(placements_.size(), 0.0f);
     runtimeSavePointUsed_.assign(placements_.size(), 0);
 
@@ -2660,6 +2659,9 @@ void StageEditor::ResetRuntimeState() {
         const float initialDirection = (i % 2 == 0) ? 1.0f : -1.0f;
         runtimeEnemyBehaviors_[i] = CreateEnemyBehavior(
             placements_[i].itemId, initialDirection);
+        if (placements_[i].itemId == 28) {
+            runtimeFallingFloors_[i] = std::make_unique<FallingFloorBehavior>();
+        }
         if (placements_[i].itemId == 25) playerRespawnPosition_ = placements_[i].position;
         if (placements_[i].itemId == 5) runtimePlacementActive_[i] = 0;
         // 新規ゲームでは使用済み表示も初期色へ戻す。
@@ -3048,42 +3050,25 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
             const bool standingOnFloor = IsRuntimePlacementActive(i) &&
                 std::abs(playerPosition_.x - previousPosition.x) <= kPlayerHalfSize + halfX &&
                 std::abs((playerPosition_.y - kPlayerHalfSize) - oldTop) <= 0.09f;
-            uint8_t& state = runtimeFallingFloorStates_[i];
-            float& timer = runtimeFallingFloorTimers_[i];
-            float& velocity = runtimeFallingFloorVelocities_[i];
+            if (i >= runtimeFallingFloors_.size() || !runtimeFallingFloors_[i]) {
+                if (runtimeFallingFloors_.size() != placements_.size()) {
+                    runtimeFallingFloors_.resize(placements_.size());
+                }
+                runtimeFallingFloors_[i] = std::make_unique<FallingFloorBehavior>();
+            }
 
-            if (state == 0) { // Waiting for the player.
-                position = placements_[i].position;
-                if (standingOnFloor) {
-                    state = 1;
-                    timer = 0.7f;
-                    ShowRuntimeMessage("FLOOR IS FALLING!", 0.8f);
-                }
-            } else if (state == 1) { // Warning shake before falling.
-                timer -= deltaTime;
-                position = placements_[i].position;
-                position.x += std::sin(runtimeTime_ * 55.0f) * 0.035f;
-                if (timer <= 0.0f) {
-                    state = 2;
-                    velocity = 0.0f;
-                }
-            } else if (state == 2) { // Falling under gravity.
-                velocity -= 18.0f * deltaTime;
-                position.y += velocity * deltaTime;
-                if (position.y < -3.0f) {
-                    state = 3;
-                    timer = 1.6f;
-                    runtimePlacementActive_[i] = 0;
-                    position = placements_[i].position;
-                }
-            } else { // Hidden briefly, then restored at its saved position.
-                timer -= deltaTime;
-                position = placements_[i].position;
-                if (timer <= 0.0f) {
-                    state = 0;
-                    velocity = 0.0f;
-                    runtimePlacementActive_[i] = 1;
-                }
+            FallingFloorUpdateContext floorContext{};
+            floorContext.deltaTime = deltaTime;
+            floorContext.runtimeTime = runtimeTime_;
+            floorContext.playerStanding = standingOnFloor;
+            floorContext.spawnPosition = placements_[i].position;
+            floorContext.currentPosition = position;
+            const FallingFloorUpdateResult floorResult =
+                runtimeFallingFloors_[i]->Update(floorContext);
+            position = floorResult.position;
+            runtimePlacementActive_[i] = floorResult.collisionEnabled ? 1 : 0;
+            if (floorResult.warningStarted) {
+                ShowRuntimeMessage("FLOOR IS FALLING!", 0.8f);
             }
 
             // 警告用の横揺れは床の見た目だけに適用し、自機のX座標は動かさない。
@@ -3093,14 +3078,13 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
             // 実際に床が落下している間はY方向の移動量だけを自機へ加える。
             // 自機が床上に乗り続けている場合は床と一緒に真下へ落ち、
             // 落下ラインを越えた時に通常のリスポーン処理へ移行する。
-            if (standingOnFloor && state == 2) {
+            if (standingOnFloor &&
+                floorResult.nextPhase == FallingFloorPhase::Falling) {
                 playerPosition_.y += position.y - previousPosition.y;
             }
             if (i < objects_.size() && objects_[i]) {
-                const char* visualFile = state == 1
-                    ? "falling_ruin_warning.obj"
-                    : (state == 2 ? "falling_ruin_broken.obj" : "falling_ruin_idle.obj");
-                objects_[i]->SetModel(ModelManager::Load("Resources/Block/FallingRuin", visualFile));
+                objects_[i]->SetModel(ModelManager::Load(
+                    "Resources/Block/FallingRuin", floorResult.visualFile));
                 // 状態色をモデル全体へ乗算せず、手描き調の石材色と亀裂色をそのまま表示する。
                 objects_[i]->SetColor({1.0f,1.0f,1.0f,1.0f});
             }
@@ -3304,7 +3288,8 @@ void StageEditor::ResolvePlacedSolidCollisions() {
             // 崩れる床には通常の箱型押し出しを使わず、上面だけの一方向床判定を使う。
             // これにより、床の横端や揺れに触れても自機が左右へ弾かれず、
             // 下側から接触した場合にも床へ挟まらない。
-            if (i >= runtimeFallingFloorStates_.size() || runtimeFallingFloorStates_[i] >= 3) {
+            if (i >= runtimeFallingFloors_.size() || !runtimeFallingFloors_[i] ||
+                !runtimeFallingFloors_[i]->IsCollisionEnabled()) {
                 // 画面下へ落ちて消滅した後は完全に当たり判定をなくす。
                 continue;
             }
