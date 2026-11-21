@@ -15,6 +15,7 @@
 #include "ClearPresentationController.h"
 #include "EnemyBehavior.h"
 #include "FallingFloorState.h"
+#include "StageObjectFactory.h"
 
 class Object3dCommon;
 class Model;
@@ -234,6 +235,7 @@ private:
     Object3dCommon* object3dCommon_ = nullptr;
     uint32_t environmentTexture_ = 0;
     float environmentCoefficient_ = 0.0f;
+    std::unique_ptr<StageObjectFactory> stageObjectFactory_;
 
     Mode mode_ = Mode::Editor;
     Category category_ = Category::Basic;
