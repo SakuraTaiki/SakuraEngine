@@ -12,6 +12,7 @@
 
 #include "MyMath.h"
 #include "Object3d.h"
+#include "ClearPresentationController.h"
 
 class Object3dCommon;
 class Model;
@@ -24,7 +25,7 @@ public:
     static constexpr float kTileWorldSize = 1.0f;
 
     enum class Mode { Editor, GamePlay };
-    enum class GameFlowState { Title, StageSelect, IntroCamera, Countdown, Playing, Pause, Clear, GameOver };
+    enum class GameFlowState { Title, StageSelect, GimmickGuide, IntroCamera, Countdown, Playing, Pause, Clear, GameOver };
     enum class Category { Basic, Gimmick, Enemy, System };
     enum class TileCollisionType { Empty, Solid, OneWay, Ladder, SlopeUpRight, SlopeUpLeft };
 
@@ -79,6 +80,9 @@ public:
     const Vector3& GetPlayerPosition() const { return playerPosition_; }
     // タイトル後のステージ紹介カメラで使用する状態と注目位置。
     bool IsIntroCameraActive() const { return gameFlowState_ == GameFlowState::IntroCamera; }
+    bool IsClearPresentationActive() const {
+        return mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Clear;
+    }
     float GetIntroCameraProgress() const;
     float GetIntroCameraStartX() const;
     float GetIntroCameraGoalX() const;
@@ -187,6 +191,9 @@ private:
     int TileIndex(int gridX, int gridY) const;
     int FindNearestPlacement(float maxDistance) const;
     const ItemDefinition* FindItem(int id) const;
+    std::vector<int> GetVisibleGimmickGuideEntries() const;
+    std::vector<int> GetVisibleGimmickGuideCategories() const;
+    std::vector<int> GetGimmickGuideEntriesForCategory(int category) const;
 
     std::unique_ptr<Object3d> CreateObject(const Placement& placement) const;
     Vector3 GetPlacementModelPosition(
@@ -255,8 +262,28 @@ private:
     std::unique_ptr<Object3d> stageSelectStage1Object_;
     std::unique_ptr<Object3d> stageSelectStage2Object_;
     float stageSelectPulseTimer_ = 0.0f;
+    // ステージ開始前とプレイ中TAB表示で共用するギミック一覧。
+    bool gimmickGuideFromPlaying_ = false;
+    int selectedGimmickGuideCategory_ = 0;
+    int selectedGimmickGuideEntry_ = 0;
+    float gimmickGuidePulseTimer_ = 0.0f;
+    // 選択中の大型プレビューとは別に、下部一覧へ同じモデルを表示するための複製。
+    std::vector<std::unique_ptr<Object3d>> gimmickGuideIconObjects_;
+    std::vector<std::unique_ptr<Object3d>> gimmickGuideThumbnailObjects_;
+    std::vector<std::unique_ptr<Object3d>> gimmickGuideTextObjects_;
+    std::vector<std::unique_ptr<Object3d>> gimmickGuideCategoryObjects_;
     std::unique_ptr<Object3d> pauseRestartObject_;
     std::unique_ptr<Object3d> pauseBackToSelectObject_;
+    // プレイ中の進行状況を示す3D目標文字。鍵の取得前後で表示を切り替える。
+    std::unique_ptr<Object3d> objectivePickupKeyObject_;
+    std::unique_ptr<Object3d> objectiveReachGoalObject_;
+    // ステージ紹介カメラ中に表示するBlender製3D見出し。
+    std::unique_ptr<Object3d> stagePreviewObject_;
+    // モデル、タイマー、入力受付、描画を専用クラス内へ隠蔽する。
+    ClearPresentationController clearPresentation_;
+    bool objectiveShowsPickupKey_ = false;
+    bool objectiveStateInitialized_ = false;
+    float objectiveTransitionTimer_ = 0.0f;
     GameFlowState pauseReturnState_ = GameFlowState::Playing;
     int selectedPauseOption_ = 0;
     float pauseMenuPulseTimer_ = 0.0f;
@@ -314,8 +341,6 @@ private:
     float playerDamageCooldown_ = 0.0f;
     float runtimeMessageTimer_ = 0.0f;
     float doorCooldown_ = 0.0f;
-    // ゴール後にクリア画面を表示してから、タイトルへ自動遷移するまでの残り時間。
-    float clearReturnTimer_ = 0.0f;
     // 最後の残機を失った後の専用画面と入力解禁タイミングを管理する。
     float gameOverTimer_ = 0.0f;
     bool gameOverExitActive_ = false;
@@ -355,12 +380,11 @@ private:
     int lifeChangedSlot_ = -1;
     float lifeChangeTimer_ = 0.0f;
     static constexpr float kLifeChangeDuration = 0.9f;
-    // 左下の移動操作HUD。プレイ開始10秒後は薄くし、WASD入力中だけ再び強調する。
+    // 左下の操作HUD。プレイ開始10秒後は薄くし、A/D/SPACE入力中だけ再び強調する。
     float movementHudPlayingTime_ = 0.0f;
-    bool movementKeyW_ = false;
     bool movementKeyA_ = false;
-    bool movementKeyS_ = false;
     bool movementKeyD_ = false;
+    bool movementKeySpace_ = false;
     std::string runtimeMessage_;
     int collectedStars_ = 0;
     int collectedBubbles_ = 0;

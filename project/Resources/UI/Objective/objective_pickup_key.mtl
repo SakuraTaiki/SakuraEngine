@@ -1,0 +1,12 @@
+# Blender 4.4.1 MTL File: 'None'
+# www.blender.org
+
+newmtl ObjectiveBlueWhite
+Ns 336.400055
+Ka 0.080000 0.080000 0.080000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 3
+map_Kd objective_text.png
+map_d objective_text.png

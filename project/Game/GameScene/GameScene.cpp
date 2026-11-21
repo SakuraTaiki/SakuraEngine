@@ -141,6 +141,7 @@ void GameScene::Finalize() {
     environment_.Finalize();
     // ModelManagerを破棄する前に、モデルを参照している天球を解放する。
     skyDome_.reset();
+    clearSkyDome_.reset();
     sprite_.reset();
 
     soundController_.Finalize();
@@ -181,6 +182,18 @@ void GameScene::InitializeSkyDome() {
     skyDome_->SetEnvironmentCoefficient(0.0f);
     // 青紫をわずかに強め、タイトル画面では鮮やかさを保ちながら白文字を読みやすくする。
     skyDome_->SetColor({ 0.94f, 0.92f, 1.0f, 1.0f });
+
+    Model* clearSkyModel = ModelManager::Load(
+        "Resources/Clear", "prism_clear_sphere.obj");
+    if (clearSkyModel) {
+        clearSkyDome_ = std::make_unique<Object3d>();
+        clearSkyDome_->Initialize(context_->GetObject3dCommon());
+        clearSkyDome_->SetModel(clearSkyModel);
+        clearSkyDome_->SetScale({80.0f, 80.0f, 80.0f});
+        clearSkyDome_->SetEnableLighting(false);
+        clearSkyDome_->SetEnvironmentCoefficient(0.0f);
+        clearSkyDome_->SetColor({1.0f, 1.0f, 1.0f, 1.0f});
+    }
 }
 
 
@@ -352,6 +365,10 @@ void GameScene::UpdateSkyDome() {
 
     skyDome_->SetPosition(context_->GetCamera()->GetTranslate());
     skyDome_->Update();
+    if (clearSkyDome_) {
+        clearSkyDome_->SetPosition(context_->GetCamera()->GetTranslate());
+        clearSkyDome_->Update();
+    }
 }
 
 // 処理概要: フレーム入力と経過時間を反映し、担当する状態を更新する。
@@ -678,7 +695,9 @@ void GameScene::Draw3D() {
     context_->GetObject3dCommon()->PreDraw();
 
     // 天球を最初に描画し、その後のステージ・キャラクターで手前を上書きする。
-    if (skyDome_) {
+    if (stageEditor_.IsClearPresentationActive() && clearSkyDome_) {
+        clearSkyDome_->Draw();
+    } else if (skyDome_) {
         skyDome_->Draw();
     }
 
