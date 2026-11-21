@@ -14,6 +14,7 @@
 #include "Object3d.h"
 #include "ClearPresentationController.h"
 #include "EnemyBehavior.h"
+#include "FallingFloorState.h"
 
 class Object3dCommon;
 class Model;
@@ -327,9 +328,7 @@ private:
     std::vector<Vector3> runtimePlacementPositions_;
     // 各敵の状態と振る舞いは基底クラス経由で保持し、敵種別の分岐を外へ漏らさない。
     std::vector<std::unique_ptr<EnemyBehavior>> runtimeEnemyBehaviors_;
-    std::vector<uint8_t> runtimeFallingFloorStates_;
-    std::vector<float> runtimeFallingFloorTimers_;
-    std::vector<float> runtimeFallingFloorVelocities_;
+    std::vector<std::unique_ptr<FallingFloorBehavior>> runtimeFallingFloors_;
     // ジャンプパッドごとの踏み込み・反発アニメーション残り時間。
     std::vector<float> runtimeJumpPadTimers_;
     // Checkpoint / Save Pointが一度使用されたかを配置インデックス単位で保持する。
