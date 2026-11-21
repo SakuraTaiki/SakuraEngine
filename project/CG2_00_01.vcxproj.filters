@@ -55,6 +55,7 @@
     <ClCompile Include="Game\GameScene\GameScene.cpp" />
     <ClCompile Include="Game\Controller\AnimationDebugController.cpp" />
     <ClCompile Include="Game\Controller\CameraDebugController.cpp" />
+    <ClCompile Include="Game\Controller\ClearPresentationController.cpp" />
     <ClCompile Include="Game\Controller\EnvironmentController.cpp" />
     <ClCompile Include="Game\Controller\HitEffectController.cpp" />
     <ClCompile Include="Game\Controller\SceneDebugPanel.cpp" />
@@ -122,6 +123,7 @@
     <ClInclude Include="Engine\Core\D3DResourceHelper.h" />
     <ClInclude Include="Game\Controller\AnimationDebugController.h" />
     <ClInclude Include="Game\Controller\CameraDebugController.h" />
+    <ClInclude Include="Game\Controller\ClearPresentationController.h" />
     <ClInclude Include="Game\Controller\EnvironmentController.h" />
     <ClInclude Include="Game\Controller\HitEffectController.h" />
     <ClInclude Include="Game\Controller\SceneDebugPanel.h" />

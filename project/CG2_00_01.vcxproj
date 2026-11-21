@@ -207,6 +207,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(TargetDir)Resources\" &gt;nul</Comman
     <ClCompile Include="Game\Controller\AnimationDebugController.cpp" />
     <ClCompile Include="Game\Controller\AnimationDebugPanel.cpp" />
     <ClCompile Include="Game\Controller\CameraDebugController.cpp" />
+    <ClCompile Include="Game\Controller\ClearPresentationController.cpp" />
     <ClCompile Include="Game\Controller\EnvironmentController.cpp" />
     <ClCompile Include="Game\Controller\HitEffectController.cpp" />
     <ClCompile Include="Game\Controller\SceneDebugPanel.cpp" />
@@ -296,6 +297,7 @@ xcopy /E /I /Y "$(ProjectDir)Resources" "$(TargetDir)Resources\" &gt;nul</Comman
     <ClInclude Include="Game\Controller\AnimationDebugController.h" />
     <ClInclude Include="Game\Controller\AnimationDebugPanel.h" />
     <ClInclude Include="Game\Controller\CameraDebugController.h" />
+    <ClInclude Include="Game\Controller\ClearPresentationController.h" />
     <ClInclude Include="Game\Controller\EnvironmentController.h" />
     <ClInclude Include="Game\Controller\HitEffectController.h" />
     <ClInclude Include="Game\Controller\HitEffectControllerLoad.h" />

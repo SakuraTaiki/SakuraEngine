@@ -1,0 +1,12 @@
+# Blender 4.4.1 MTL File: 'None'
+# www.blender.org
+
+newmtl StagePreviewBlueWhite
+Ns 384.399994
+Ka 0.100000 0.100000 0.100000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 3
+map_Kd stage_preview_text.png
+map_d stage_preview_text.png

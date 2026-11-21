@@ -57,21 +57,29 @@ def build(material):
     text = bpy.context.object
     text.name = "PrismGoalLabel"
     text.data.body = "GOAL"
+    # A bold face and restrained bevel keep the counters in G/O/A readable
+    # after the model is reduced to the small intro-preview size.
+    bold_font = Path("C:/Windows/Fonts/BIZ-UDGothicB.ttc")
+    if bold_font.exists():
+        text.data.font = bpy.data.fonts.load(str(bold_font))
     text.data.align_x = "CENTER"
     text.data.align_y = "CENTER"
     text.data.size = 1.0
-    text.data.extrude = 0.075
-    text.data.bevel_depth = 0.018
-    text.data.bevel_resolution = 2
+    text.data.space_character = 1.05
+    text.data.extrude = 0.045
+    text.data.bevel_depth = 0.006
+    text.data.bevel_resolution = 1
     text.data.fill_mode = "BOTH"
     text.data.materials.append(material)
     bpy.context.view_layer.objects.active = text
     bpy.ops.object.convert(target="MESH")
 
-    # Normalize for a compact label above the arrow.
-    scale_x = 1.08 / max(text.dimensions.x, 0.001)
-    scale_y = 0.30 / max(text.dimensions.y, 0.001)
-    text.scale = (scale_x, scale_y, 1.0)
+    # Preserve the glyph aspect ratio. The old asset was squeezed to 1.08 wide,
+    # which closed the inner spaces and made every letter look crushed.
+    uniform_scale = 0.42 / max(text.dimensions.y, 0.001)
+    # Give the short English label extra horizontal breathing room; at the
+    # distant preview camera a near-square wordmark reads as a solid bar.
+    text.scale = (uniform_scale * 1.35, uniform_scale, uniform_scale)
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
 
     # The CG2 OBJ conversion reverses authored Y. Rotate the source 180 degrees

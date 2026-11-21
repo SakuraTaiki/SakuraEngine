@@ -71,6 +71,8 @@ private:
     std::unique_ptr<Sprite> sprite_;
     // ステージ全体を包む天球。カメラに追従させ、背景としてのみ使用する。
     std::unique_ptr<Object3d> skyDome_;
+    // ゴール後だけ通常の夕暮れ天球と差し替える、明るいクリア専用天球。
+    std::unique_ptr<Object3d> clearSkyDome_;
     std::unique_ptr<Ring> ring_;
     std::unique_ptr<Cylinder> cylinder_;
 

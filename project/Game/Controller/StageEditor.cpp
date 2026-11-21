@@ -229,6 +229,57 @@ void StageEditor::Initialize(Object3dCommon* common, uint32_t environmentTexture
         "Resources/UI/PauseMenu", "pause_restart.obj");
     pauseBackToSelectObject_ = createStageSelectObject(
         "Resources/UI/PauseMenu", "pause_back_to_select.obj");
+    objectivePickupKeyObject_ = createStageSelectObject(
+        "Resources/UI/Objective", "objective_pickup_key.obj");
+    objectiveReachGoalObject_ = createStageSelectObject(
+        "Resources/UI/Objective", "objective_reach_goal.obj");
+    stagePreviewObject_ = createStageSelectObject(
+        "Resources/UI/StagePreview", "stage_preview.obj");
+    clearPresentation_.Initialize(object3dCommon_, environmentTexture_);
+    constexpr const char* guideTextFiles[] = {
+        "stage1_falling_floor_name.obj", "stage1_spring_pad_name.obj",
+        "stage2_key_name.obj", "stage2_locked_door_name.obj",
+        "stage2_crash_cube_name.obj", "stage2_glider_name.obj",
+        "stage1_save_flag_name.obj", "stage1_goal_name.obj",
+        "stage1_falling_floor_detail.obj", "stage1_spring_pad_detail.obj",
+        "stage2_key_detail.obj", "stage2_locked_door_detail.obj",
+        "stage2_crash_cube_detail.obj", "stage2_glider_detail.obj",
+        "stage1_save_flag_detail.obj", "stage1_goal_detail.obj"
+    };
+    for (const char* fileName : guideTextFiles) {
+        gimmickGuideTextObjects_.push_back(createStageSelectObject(
+            "Resources/UI/GimmickGuide", fileName));
+    }
+    constexpr const char* guideCategoryFiles[] = {
+        "category_platform.obj", "category_movement.obj", "category_item.obj",
+        "category_mechanism.obj", "category_enemy.obj", "category_progress.obj"
+    };
+    for (const char* fileName : guideCategoryFiles) {
+        gimmickGuideCategoryObjects_.push_back(createStageSelectObject(
+            "Resources/UI/GimmickGuide", fileName));
+    }
+    struct GuideModelFile { const char* directory; const char* file; };
+    constexpr GuideModelFile guideModelFiles[] = {
+        {"Resources/Block/FallingRuin", "falling_ruin_idle.obj"},
+        {"Resources/Gimmick/PrismSpringPad", "prism_spring_pad_idle.obj"},
+        {"Resources/Gimmick/PrismKey", "prism_key.obj"},
+        {"Resources/Gimmick/PrismLockedDoor", "prism_locked_door.obj"},
+        {"Resources/Enemy/CrashCube", "crash_cube.obj"},
+        {"Resources/Enemy/PrismGlider", "prism_glider.obj"},
+        {"Resources/System/PrismSaveFlag", "prism_save_flag_inactive.obj"},
+        {"Resources/Goal/PrismBeacon", "prism_beacon.obj"},
+    };
+    for (const GuideModelFile& model : guideModelFiles) {
+        auto guideObject = createStageSelectObject(model.directory, model.file);
+        guideObject->SetEnableLighting(true);
+        guideObject->SetEnvironmentCoefficient(environmentCoefficient_);
+        gimmickGuideIconObjects_.push_back(std::move(guideObject));
+
+        auto thumbnailObject = createStageSelectObject(model.directory, model.file);
+        thumbnailObject->SetEnableLighting(true);
+        thumbnailObject->SetEnvironmentCoefficient(environmentCoefficient_);
+        gimmickGuideThumbnailObjects_.push_back(std::move(thumbnailObject));
+    }
     constexpr const char* countdownModelFiles[] = {
         "countdown_1.obj", "countdown_2.obj", "countdown_3.obj"
     };
@@ -379,6 +430,14 @@ void StageEditor::Finalize() {
     stageSelectStage2Object_.reset();
     pauseRestartObject_.reset();
     pauseBackToSelectObject_.reset();
+    objectivePickupKeyObject_.reset();
+    objectiveReachGoalObject_.reset();
+    stagePreviewObject_.reset();
+    clearPresentation_.Finalize();
+    gimmickGuideIconObjects_.clear();
+    gimmickGuideThumbnailObjects_.clear();
+    gimmickGuideTextObjects_.clear();
+    gimmickGuideCategoryObjects_.clear();
     countdownDigitObjects_.clear();
     titleLetterObjects_.clear();
     playerObject_.reset();
@@ -402,17 +461,42 @@ void StageEditor::Update(Input* input) {
     constexpr float deltaTime = 1.0f / 60.0f;
     lifeChangeTimer_ = (std::max)(0.0f, lifeChangeTimer_ - deltaTime);
     if (mode_ == Mode::GamePlay) UpdateGameFlow(input);
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::GimmickGuide) {
+        gimmickGuidePulseTimer_ += deltaTime;
+    }
     const bool movementHudActive = mode_ == Mode::GamePlay &&
         gameFlowState_ == GameFlowState::Playing && input != nullptr;
-    movementKeyW_ = movementHudActive && input->PushKey(DIK_W);
     movementKeyA_ = movementHudActive && input->PushKey(DIK_A);
-    movementKeyS_ = movementHudActive && input->PushKey(DIK_S);
     movementKeyD_ = movementHudActive && input->PushKey(DIK_D);
+    movementKeySpace_ = movementHudActive && input->PushKey(DIK_SPACE);
     if (movementHudActive) {
         movementHudPlayingTime_ += deltaTime;
     }
     UpdateTitleStartParticles(deltaTime);
     UpdateGoalPreviewEffect();
+    if (stagePreviewObject_ && mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::IntroCamera) {
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            const Vector3& cameraPosition = camera->GetTranslate();
+            const float progress = GetIntroCameraProgress();
+            const float appear = std::clamp(progress / 0.10f, 0.0f, 1.0f);
+            const float disappear = 1.0f - std::clamp((progress - 0.88f) / 0.10f, 0.0f, 1.0f);
+            const float alpha = appear * disappear;
+            const float eased = 1.0f - std::pow(1.0f - appear, 3.0f);
+            const float pulse = 0.5f + 0.5f * std::sin(runtimeTime_ * 2.8f);
+            const float scale = (0.72f + eased * 0.18f) * (1.0f + pulse * 0.025f);
+            stagePreviewObject_->SetPosition({
+                cameraPosition.x,
+                cameraPosition.y + 3.62f + (1.0f - eased) * 0.24f,
+                cameraPosition.z + 21.35f + (1.0f - eased) * 2.0f
+            });
+            stagePreviewObject_->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+            stagePreviewObject_->SetScale({-scale, scale, scale});
+            stagePreviewObject_->SetColor({0.35f, 0.90f + pulse * 0.08f, 1.0f, alpha});
+            stagePreviewObject_->Update();
+        }
+    }
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing &&
         !respawnEffectActive_) UpdateRuntimeObjects(deltaTime);
     for (auto& object:tileObjects_) if(object) object->Update();
@@ -668,6 +752,186 @@ void StageEditor::Update(Input* input) {
         }
     } else {
         pauseMenuPulseTimer_ = 0.0f;
+    }
+
+    // 画面上部へカメラ追従の3D目標文字を表示する。
+    // 鍵付きドアが有効で、まだ鍵を持っていない間だけ「鍵を拾え」を表示し、
+    // 鍵取得後または通常ステージでは「ゴールを目指せ」へ段階的に切り替える。
+    if (objectivePickupKeyObject_ && objectiveReachGoalObject_ &&
+        mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) {
+        const bool activeLockedDoor = [&]() {
+            for (size_t i = 0; i < placements_.size(); ++i) {
+                if (placements_[i].itemId == 9 && IsRuntimePlacementActive(i)) return true;
+            }
+            return false;
+        }();
+        const bool showPickupKey = activeLockedDoor && keyCount_ <= 0;
+        if (!objectiveStateInitialized_ || objectiveShowsPickupKey_ != showPickupKey) {
+            objectiveShowsPickupKey_ = showPickupKey;
+            objectiveStateInitialized_ = true;
+            objectiveTransitionTimer_ = 0.0f;
+        } else {
+            objectiveTransitionTimer_ += deltaTime;
+        }
+
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            Object3d* objective = showPickupKey
+                ? objectivePickupKeyObject_.get()
+                : objectiveReachGoalObject_.get();
+            const Vector3& cameraPosition = camera->GetTranslate();
+            const float appear = std::clamp(objectiveTransitionTimer_ / 0.34f, 0.0f, 1.0f);
+            const float eased = 1.0f - std::pow(1.0f - appear, 3.0f);
+            const float pulse = 0.5f + 0.5f * std::sin(runtimeTime_ * 3.2f);
+            const float baseScale = showPickupKey ? 0.78f : 0.70f;
+            const float scale = baseScale * (0.72f + eased * 0.28f) * (1.0f + pulse * 0.025f);
+            objective->SetPosition({
+                cameraPosition.x,
+                cameraPosition.y + 3.65f + (1.0f - eased) * 0.28f,
+                cameraPosition.z + 21.35f + (1.0f - eased) * 2.2f
+            });
+            objective->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+            objective->SetScale({-scale, scale, scale});
+            objective->SetColor(showPickupKey
+                ? Vector4{1.0f, 0.72f + pulse * 0.12f, 0.12f, eased}
+                : Vector4{0.30f, 0.90f + pulse * 0.08f, 1.0f, eased});
+            objective->Update();
+        }
+    } else {
+        objectiveStateInitialized_ = false;
+        objectiveTransitionTimer_ = 0.0f;
+    }
+
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::GimmickGuide &&
+        gimmickGuideIconObjects_.size() >= 8 && gimmickGuideThumbnailObjects_.size() >= 8 &&
+        gimmickGuideTextObjects_.size() >= 16 && gimmickGuideCategoryObjects_.size() >= 6) {
+        Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        if (camera) {
+            const Vector3& cameraPosition = camera->GetTranslate();
+            // 全ステージ共通の実装ギミック図鑑。カテゴリ順に並べる。
+            // 足場 / 移動 / アイテム / 仕掛け / 敵2種 / 進行2種
+            constexpr int guideItemIds[] = {28, 29, 20, 9, 22, 23, 31, 17};
+            // 縦長・横長の差を吸収し、ガイド上で同程度の存在感に揃える。
+            constexpr float mainPreviewScales[] = {
+                2.05f, 2.00f, 2.15f, 1.32f, 1.80f, 1.85f, 1.35f, 1.18f
+            };
+            constexpr float thumbnailScales[] = {
+                0.86f, 0.86f, 0.92f, 0.56f, 0.76f, 0.78f, 0.58f, 0.48f
+            };
+            const std::vector<int> visibleCategories = GetVisibleGimmickGuideCategories();
+            if (std::find(visibleCategories.begin(), visibleCategories.end(),
+                    selectedGimmickGuideCategory_) == visibleCategories.end()) {
+                selectedGimmickGuideCategory_ = visibleCategories.front();
+            }
+            const std::vector<int> categoryEntries =
+                GetGimmickGuideEntriesForCategory(selectedGimmickGuideCategory_);
+            if (std::find(categoryEntries.begin(), categoryEntries.end(),
+                    selectedGimmickGuideEntry_) == categoryEntries.end()) {
+                selectedGimmickGuideEntry_ = categoryEntries.front();
+            }
+            const int itemCount = static_cast<int>(categoryEntries.size());
+            const size_t selectedIndex = static_cast<size_t>(selectedGimmickGuideEntry_);
+
+            // 読み込んだステージで使われているカテゴリだけを表示する。
+            const float categorySpacing = visibleCategories.size() <= 4 ? 2.55f : 1.95f;
+            for (size_t categorySlot = 0; categorySlot < visibleCategories.size(); ++categorySlot) {
+                const int categoryIndex = visibleCategories[categorySlot];
+                auto& category = gimmickGuideCategoryObjects_[static_cast<size_t>(categoryIndex)];
+                const float centeredVisibleSlot = static_cast<float>(categorySlot) -
+                    static_cast<float>(visibleCategories.size() - 1) * 0.5f;
+                category->SetPosition({cameraPosition.x + centeredVisibleSlot * categorySpacing,
+                    cameraPosition.y + 2.82f, cameraPosition.z + 21.25f});
+                category->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+                const bool selectedCategory = categoryIndex == selectedGimmickGuideCategory_;
+                const float categoryScale = selectedCategory ? 0.78f : 0.52f;
+                category->SetScale({categoryScale, categoryScale, categoryScale});
+                category->SetColor(selectedCategory
+                    ? Vector4{1.0f, 0.80f, 0.22f, 1.0f}
+                    : Vector4{0.34f, 0.78f, 0.88f, 0.82f});
+                category->Update();
+            }
+
+            const auto makeDisplayPlacement = [&](size_t index) {
+                Placement displayPlacement{};
+                displayPlacement.itemId = guideItemIds[index];
+                if (const ItemDefinition* definition = FindItem(displayPlacement.itemId)) {
+                    displayPlacement.scale = definition->defaultScale;
+                }
+                for (const Placement& placement : placements_) {
+                    if (placement.itemId == displayPlacement.itemId) {
+                        displayPlacement.rotation = placement.rotation;
+                        displayPlacement.scale = placement.scale;
+                        displayPlacement.variant = placement.variant;
+                        break;
+                    }
+                }
+                return displayPlacement;
+            };
+
+            // 選択中のモデルを左側へ大きく表示する。回転は実際のステージ配置を維持する。
+            const Placement selectedPlacement = makeDisplayPlacement(selectedIndex);
+            auto& preview = gimmickGuideIconObjects_[selectedIndex];
+            const Vector3 previewBase{cameraPosition.x - 3.55f,
+                cameraPosition.y + 0.58f, cameraPosition.z + 20.65f};
+            preview->SetPosition(GetPlacementModelPosition(selectedPlacement, previewBase));
+            preview->SetRotation(GetPlacementModelRotation(selectedPlacement));
+            const Vector3 previewScale = GetPlacementModelScale(selectedPlacement);
+            const float previewMultiplier = mainPreviewScales[selectedIndex];
+            preview->SetScale({previewScale.x * previewMultiplier,
+                previewScale.y * previewMultiplier, previewScale.z * previewMultiplier});
+            const ItemDefinition* selectedDefinition = FindItem(selectedPlacement.itemId);
+            preview->SetColor(selectedDefinition ? selectedDefinition->color : Vector4{1, 1, 1, 1});
+            preview->Update();
+
+            // 右側は1件だけを十分な大きさで表示し、長い日本語の縮小による潰れを防ぐ。
+            auto& name = gimmickGuideTextObjects_[selectedIndex];
+            name->SetPosition({cameraPosition.x + 2.25f,
+                cameraPosition.y + 1.18f, cameraPosition.z + 21.25f});
+            name->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+            constexpr float nameScale = 1.32f;
+            name->SetScale({nameScale, nameScale, nameScale});
+            name->SetColor({0.38f, 0.96f, 1.0f, 1.0f});
+            name->Update();
+
+            auto& detail = gimmickGuideTextObjects_[8 + selectedIndex];
+            detail->SetPosition({cameraPosition.x + 2.25f,
+                cameraPosition.y - 0.32f, cameraPosition.z + 21.25f});
+            detail->SetRotation({kPi * 0.5f, 0.0f, 0.0f});
+            constexpr float detailScale = 1.18f;
+            detail->SetScale({detailScale, detailScale, detailScale});
+            detail->SetColor({0.96f, 0.99f, 1.0f, 1.0f});
+            detail->Update();
+
+            // 下部には現在カテゴリ内の種類だけを表示する。
+            // 現在は最大2種類だが、将来5種類まで横へ拡張できる配置計算にする。
+            for (int slot = 0; slot < itemCount; ++slot) {
+                const size_t index = static_cast<size_t>(categoryEntries[slot]);
+                const Placement placement = makeDisplayPlacement(index);
+                auto& thumbnail = gimmickGuideThumbnailObjects_[index];
+                const float thumbnailX = (static_cast<float>(slot) -
+                    static_cast<float>(itemCount - 1) * 0.5f) * 2.35f;
+                const Vector3 thumbnailBase{cameraPosition.x + thumbnailX,
+                    cameraPosition.y - 2.48f, cameraPosition.z + 20.75f};
+                thumbnail->SetPosition(GetPlacementModelPosition(placement, thumbnailBase));
+                thumbnail->SetRotation(GetPlacementModelRotation(placement));
+                const Vector3 baseScale = GetPlacementModelScale(placement);
+                const bool selectedThumbnail = static_cast<int>(index) == selectedGimmickGuideEntry_;
+                const float selectedPulse = selectedThumbnail
+                    ? 1.10f + std::sin(gimmickGuidePulseTimer_ * 4.0f) * 0.05f : 0.86f;
+                const float multiplier = thumbnailScales[index] * selectedPulse;
+                thumbnail->SetScale({baseScale.x * multiplier, baseScale.y * multiplier,
+                    baseScale.z * multiplier});
+                const ItemDefinition* definition = FindItem(placement.itemId);
+                Vector4 color = definition ? definition->color : Vector4{1, 1, 1, 1};
+                if (!selectedThumbnail) {
+                    color.x *= 0.62f;
+                    color.y *= 0.62f;
+                    color.z *= 0.62f;
+                }
+                thumbnail->SetColor(color);
+                thumbnail->Update();
+            }
+        }
     }
 
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Countdown &&
@@ -984,7 +1248,9 @@ void StageEditor::Draw3D() {
     // IntroCameraへ切り替わったフレームから描画を開始する。
     const bool drawStageContents = mode_ != Mode::GamePlay ||
         (gameFlowState_ != GameFlowState::Title &&
-         gameFlowState_ != GameFlowState::StageSelect);
+         gameFlowState_ != GameFlowState::StageSelect &&
+         gameFlowState_ != GameFlowState::Clear &&
+         (gameFlowState_ != GameFlowState::GimmickGuide || gimmickGuideFromPlaying_));
 
     if (drawStageContents) {
         for (size_t i = 0; i < tileObjects_.size(); ++i) {
@@ -1076,6 +1342,55 @@ void StageEditor::Draw3D() {
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Pause) {
         if (pauseRestartObject_) pauseRestartObject_->Draw();
         if (pauseBackToSelectObject_) pauseBackToSelectObject_->Draw();
+    }
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::GimmickGuide &&
+        gimmickGuideIconObjects_.size() >= 8 && gimmickGuideThumbnailObjects_.size() >= 8 &&
+        gimmickGuideTextObjects_.size() >= 16 && gimmickGuideCategoryObjects_.size() >= 6) {
+        const std::vector<int> visibleCategories = GetVisibleGimmickGuideCategories();
+        const std::vector<int> categoryEntries =
+            GetGimmickGuideEntriesForCategory(selectedGimmickGuideCategory_);
+        if (categoryEntries.empty()) return;
+        const int itemCount = static_cast<int>(categoryEntries.size());
+        const int selectedEntry = std::find(categoryEntries.begin(), categoryEntries.end(),
+            selectedGimmickGuideEntry_) != categoryEntries.end()
+            ? selectedGimmickGuideEntry_ : categoryEntries.front();
+        const size_t selectedIndex = static_cast<size_t>(selectedEntry);
+
+        for (const int visibleCategory : visibleCategories) {
+            const size_t categoryIndex = static_cast<size_t>(visibleCategory);
+            if (gimmickGuideCategoryObjects_[categoryIndex]) {
+                gimmickGuideCategoryObjects_[categoryIndex]->Draw();
+            }
+        }
+        if (gimmickGuideIconObjects_[selectedIndex]) {
+            gimmickGuideIconObjects_[selectedIndex]->Draw();
+        }
+        if (gimmickGuideTextObjects_[selectedIndex]) {
+            gimmickGuideTextObjects_[selectedIndex]->Draw();
+        }
+        if (gimmickGuideTextObjects_[8 + selectedIndex]) {
+            gimmickGuideTextObjects_[8 + selectedIndex]->Draw();
+        }
+        for (int slot = 0; slot < itemCount; ++slot) {
+            const size_t index = static_cast<size_t>(categoryEntries[slot]);
+            if (gimmickGuideThumbnailObjects_[index]) {
+                gimmickGuideThumbnailObjects_[index]->Draw();
+            }
+        }
+    }
+    if (stagePreviewObject_ && mode_ == Mode::GamePlay &&
+        gameFlowState_ == GameFlowState::IntroCamera) {
+        stagePreviewObject_->Draw();
+    }
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Clear) {
+        clearPresentation_.Draw3D();
+    }
+    if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Playing) {
+        if (objectiveShowsPickupKey_) {
+            if (objectivePickupKeyObject_) objectivePickupKeyObject_->Draw();
+        } else {
+            if (objectiveReachGoalObject_) objectiveReachGoalObject_->Draw();
+        }
     }
     if (mode_ == Mode::GamePlay && gameFlowState_ == GameFlowState::Countdown &&
         countdownDigitObjects_.size() >= 3) {
@@ -1248,18 +1563,7 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
     ImDrawList* draw=ImGui::GetWindowDrawList();
 #endif
     const bool editing=mode_==Mode::Editor;
-#ifndef PLAYER_RELEASE
-    const ImU32 color=editing?IM_COL32(38,145,235,235):IM_COL32(35,185,85,235);
-    draw->AddRectFilled({x+10,y+10},{x+174,y+40},color,5);
-    draw->AddText({x+20,y+18},IM_COL32_WHITE,editing?"EDITOR MODE":"GAMEPLAY MODE");
-#endif
     if(editing){
-        char buffer[160]{};
-        const int gridX=static_cast<int>(std::floor(cursorPosition_.x/kTileWorldSize));
-        const int gridY=static_cast<int>(std::floor(cursorPosition_.y/kTileWorldSize));
-        snprintf(buffer,sizeof(buffer),"Tile %d, %d  (%d px, %d px)",gridX,gridY,gridX*kTileSizePixels,gridY*kTileSizePixels);
-        draw->AddRectFilled({x+10,y+46},{x+250,y+72},IM_COL32(10,12,18,205),4);
-        draw->AddText({x+18,y+52},IM_COL32(255,230,70,255),buffer);
         DrawGridOverlay(x, y, width, height);
     } else if (gameFlowState_ == GameFlowState::Title) {
         // 濃紺から赤紫へ薄く色を重ね、天球の階調を残しながら彩度を補強する。
@@ -1270,13 +1574,6 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             IM_COL32(118,35,126,42),IM_COL32(118,35,126,42));
         // Release版は新規ゲームとしてSaveStage.jsonを開始するため、
         // 開発確認用のコンティニュー案内をタイトル画面へ表示しない。
-#ifndef PLAYER_RELEASE
-        if(hasSaveData_){
-            const char* resume="C / GAMEPAD Y : CONTINUE FROM SAVE POINT";
-            const ImVec2 resumeSize=ImGui::CalcTextSize(resume);
-            draw->AddText({x+(width-resumeSize.x)*0.5f,y+height*0.55f},IM_COL32(255,220,80,255),resume);
-        }
-#endif
 #ifdef PLAYER_RELEASE
     } else if (gameFlowState_ == GameFlowState::StageSelect) {
         // タイトルとゲームの間に独立した選択画面を置き、ロード前のステージを明示する。
@@ -1288,6 +1585,79 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
 
         // 選択肢以外の説明・カード・アイコンは置かず、3DのSTAGE 1 / STAGE 2だけを見せる。
 #endif
+    } else if (gameFlowState_ == GameFlowState::GimmickGuide) {
+        const std::vector<int> visibleCategories = GetVisibleGimmickGuideCategories();
+        if (std::find(visibleCategories.begin(), visibleCategories.end(),
+                selectedGimmickGuideCategory_) == visibleCategories.end()) {
+            selectedGimmickGuideCategory_ = visibleCategories.front();
+        }
+        const std::vector<int> categoryEntries =
+            GetGimmickGuideEntriesForCategory(selectedGimmickGuideCategory_);
+        if (std::find(categoryEntries.begin(), categoryEntries.end(),
+                selectedGimmickGuideEntry_) == categoryEntries.end()) {
+            selectedGimmickGuideEntry_ = categoryEntries.front();
+        }
+        const int itemCount = static_cast<int>(categoryEntries.size());
+        const auto selectedEntryIt = std::find(categoryEntries.begin(), categoryEntries.end(),
+            selectedGimmickGuideEntry_);
+        const int selectedLocalEntry = static_cast<int>(
+            std::distance(categoryEntries.begin(), selectedEntryIt));
+
+        // 開始前は独立画面、プレイ中はステージを薄く残すポーズオーバーレイにする。
+        const int backdropAlpha = gimmickGuideFromPlaying_ ? 105 : 90;
+        draw->AddRectFilledMultiColor(
+            {x, y}, {x + width, y + height},
+            IM_COL32(5, 10, 30, backdropAlpha), IM_COL32(12, 20, 49, backdropAlpha),
+            IM_COL32(38, 18, 61, backdropAlpha), IM_COL32(6, 10, 27, backdropAlpha));
+
+        const auto centeredText = [&](const char* text, float centerX, float textY, ImU32 color) {
+            const ImVec2 size = ImGui::CalcTextSize(text);
+            draw->AddText({centerX - size.x * 0.5f, textY}, color, text);
+        };
+        centeredText("GIMMICK GUIDE", x + width * 0.5f, y + 58.0f,
+            IM_COL32(218, 245, 255, 255));
+        centeredText(selectedReleaseStage_ == 1 ? "STAGE 2 GIMMICKS" : "STAGE 1 GIMMICKS",
+            x + width * 0.5f, y + 86.0f, IM_COL32(82, 221, 245, 235));
+
+        // 「カテゴリ」「選択中のモデルと説明」「カテゴリ内の種類」を視線で追えるように
+        // 細く半透明な区切り線を置く。3D文字より目立たない色に抑える。
+        const ImU32 separatorColor = IM_COL32(76, 198, 222, 138);
+        const float contentLeft = x + width * 0.12f;
+        const float contentRight = x + width * 0.88f;
+        // カテゴリ文字の下端と大型表示の間へ置き、文字の縁へ接触させない。
+        const float categorySeparatorY = y + height * 0.280f;
+        // サムネイルモデルより上へ置き、モデルの中央を横切らないようにする。
+        const float thumbnailSeparatorY = y + height * 0.655f;
+        draw->AddLine({contentLeft, categorySeparatorY},
+            {contentRight, categorySeparatorY}, separatorColor, 2.0f);
+        draw->AddLine({contentLeft, thumbnailSeparatorY},
+            {contentRight, thumbnailSeparatorY}, separatorColor, 2.0f);
+
+        // 下部の3Dサムネイルと対応する選択位置を、細い金色の下線で示す。
+        const float thumbnailSpacing = width * 0.18f;
+        const float thumbnailCenter = x + width * 0.5f;
+        for (int slot = 0; slot < itemCount; ++slot) {
+            const float slotX = thumbnailCenter + (static_cast<float>(slot) -
+                static_cast<float>(itemCount - 1) * 0.5f) * thumbnailSpacing;
+            const bool selected = categoryEntries[slot] == selectedGimmickGuideEntry_;
+            draw->AddCircleFilled({slotX, y + height - 116.0f}, selected ? 5.0f : 3.0f,
+                selected ? IM_COL32(255, 205, 68, 255) : IM_COL32(92, 135, 155, 185));
+            if (selected) {
+                draw->AddLine({slotX - 34.0f, y + height - 103.0f},
+                    {slotX + 34.0f, y + height - 103.0f}, IM_COL32(255, 205, 68, 255), 3.0f);
+            }
+        }
+
+        char guidePage[16]{};
+        std::snprintf(guidePage, sizeof(guidePage), "%d / %d",
+            selectedLocalEntry + 1, itemCount);
+        centeredText(guidePage, x + width * 0.5f, y + height - 91.0f,
+            IM_COL32(210, 235, 245, 225));
+        centeredText("W / S : CATEGORY   A / D : TYPE", x + width * 0.5f - 155.0f,
+            y + height - 52.0f, IM_COL32(151, 220, 238, 235));
+        centeredText(gimmickGuideFromPlaying_ ? "TAB / ESC : CLOSE" : "ENTER : START   ESC : BACK",
+            x + width * 0.5f + 115.0f, y + height - 52.0f,
+            IM_COL32(255, 211, 92, 240));
     } else if (gameFlowState_ == GameFlowState::Pause) {
         // プレイ画面を残しながら暗くし、3Dメニュー文字へ視線を集める。
         draw->AddRectFilledMultiColor(
@@ -1295,16 +1665,7 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             IM_COL32(4, 7, 18, 142), IM_COL32(8, 11, 28, 142),
             IM_COL32(19, 10, 31, 154), IM_COL32(5, 7, 18, 154));
     } else if (gameFlowState_ == GameFlowState::Clear) {
-        draw->AddRectFilled({x,y},{x+width,y+height},IM_COL32(4,18,10,220));
-        const char* clear="STAGE CLEAR!";
-        const ImVec2 clearSize=ImGui::CalcTextSize(clear);
-        draw->AddText({x+(width-clearSize.x)*0.5f,y+height*0.32f},IM_COL32(90,255,120,255),clear);
-        const char* returning="RETURNING TO TITLE...";
-        const ImVec2 returningSize=ImGui::CalcTextSize(returning);
-        draw->AddText(
-            {x+(width-returningSize.x)*0.5f,y+height*0.50f},
-            IM_COL32_WHITE,
-            returning);
+        clearPresentation_.DrawOverlay(draw, x, y, width, height);
     } else if (gameFlowState_ == GameFlowState::GameOver) {
         const auto smoothStep=[](float value){
             const float t=std::clamp(value,0.0f,1.0f);
@@ -1355,40 +1716,6 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             }
         }
 
-        // 壁完成時に強く揺らし、文字を一文字ずつ落下させる。
-        const float impactAge=gameOverTimer_-0.78f;
-        const float impactStrength=impactAge>=0.0f&&impactAge<0.32f
-            ? (1.0f-impactAge/0.32f)*9.0f:0.0f;
-        const float shakeX=std::sin(gameOverTimer_*92.0f)*impactStrength;
-        const float shakeY=std::cos(gameOverTimer_*77.0f)*impactStrength*0.55f;
-        const char* gameOverText="GAME OVER";
-        constexpr float gameOverFontSize=86.0f;
-        const ImVec2 titleSize=ImGui::GetFont()->CalcTextSizeA(
-            gameOverFontSize,FLT_MAX,0.0f,gameOverText);
-        float letterX=centerX-titleSize.x*0.5f+shakeX;
-        for(int i=0;gameOverText[i]!='\0';++i){
-            char letter[2]{gameOverText[i],'\0'};
-            const ImVec2 letterSize=ImGui::GetFont()->CalcTextSizeA(
-                gameOverFontSize,FLT_MAX,0.0f,letter);
-            if(gameOverText[i]==' '){letterX+=letterSize.x;continue;}
-            const float letterProgress=smoothStep((gameOverTimer_-0.72f-i*0.055f)/0.34f);
-            if(letterProgress<=0.0f)continue;
-            const float bounce=std::sin(letterProgress*kPi)*28.0f*(1.0f-letterProgress);
-            const float letterY=centerY-94.0f-(1.0f-letterProgress)*height*0.62f+bounce+shakeY;
-            const int alpha=static_cast<int>(255.0f*(1.0f-exitProgress));
-            draw->AddText(ImGui::GetFont(),gameOverFontSize,
-                {letterX+6.0f,letterY+8.0f},IM_COL32(6,7,18,alpha),letter);
-            draw->AddText(ImGui::GetFont(),gameOverFontSize,
-                {letterX,letterY},IM_COL32(232,241,246,alpha),letter);
-            letterX+=letterSize.x;
-        }
-
-        const float detailProgress=smoothStep((gameOverTimer_-1.18f)/0.36f)*(1.0f-exitProgress);
-        const char* lostText="ALL BLOCKS LOST";
-        const ImVec2 lostSize=ImGui::CalcTextSize(lostText);
-        draw->AddText({centerX-lostSize.x*0.5f,centerY+34.0f},
-            IM_COL32(255,151,62,static_cast<int>(255.0f*detailProgress)),lostText);
-
         // 残機ブロックを順番に落下・消灯させ、0になったことを視覚化する。
         for(int i=0;i<kMaxPlayerLives;++i){
             const float blockProgress=smoothStep((gameOverTimer_-1.02f-i*0.14f)/0.34f);
@@ -1406,47 +1733,8 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
                 IM_COL32(255,91,91,alpha),3.0f);
         }
 
-        if(gameOverTimer_>=kGameOverInputDelay&&!gameOverExitActive_){
-            const float blink=0.58f+0.42f*std::sin(
-                (gameOverTimer_-kGameOverInputDelay)*kPi*2.0f);
-            const char* retryText="ENTER / GAMEPAD A : REBUILD";
-            const ImVec2 retrySize=ImGui::CalcTextSize(retryText);
-            const float promptY=y+height*0.77f+std::sin(gameOverTimer_*3.4f)*4.0f;
-            draw->AddRectFilled(
-                {centerX-retrySize.x*0.5f-22.0f,promptY-11.0f},
-                {centerX+retrySize.x*0.5f+22.0f,promptY+retrySize.y+11.0f},
-                IM_COL32(5,15,29,205),6.0f);
-            draw->AddText({centerX-retrySize.x*0.5f,promptY},
-                IM_COL32(82,232,255,static_cast<int>(blink*255.0f)),retryText);
-            const char* titleText="ESC : RETURN TO TITLE";
-            const ImVec2 titleSize=ImGui::CalcTextSize(titleText);
-            draw->AddText({centerX-titleSize.x*0.5f,promptY+42.0f},
-                IM_COL32(180,190,210,220),titleText);
-        }
     } else if (gameFlowState_ == GameFlowState::IntroCamera) {
-        // 操作開始前であることが分かるよう、控えめなシネマティック表示を重ねる。
-        const char* previewText="STAGE PREVIEW";
-        const ImVec2 previewSize=ImGui::CalcTextSize(previewText);
-        const ImVec2 previewPosition{x+(width-previewSize.x)*0.5f,y+height*0.10f};
-        draw->AddRectFilled(
-            {previewPosition.x-22.0f,previewPosition.y-9.0f},
-            {previewPosition.x+previewSize.x+22.0f,previewPosition.y+previewSize.y+9.0f},
-            IM_COL32(4,10,20,190),8.0f);
-        draw->AddText(previewPosition,IM_COL32(100,225,255,255),previewText);
-
-        // スキップ操作の説明は開発中の確認用だけに表示する。
-        // Release版ではEscでタイトルへ戻った後もintroCameraSeen_が保持されるため、
-        // 2回目以降の開始時に画面下へデバッグ風の文字が現れてしまう。
-#ifndef PLAYER_RELEASE
-        if(introCameraSeen_){
-            const char* skipText="ENTER / GAMEPAD A : SKIP";
-            const ImVec2 skipSize=ImGui::CalcTextSize(skipText);
-            draw->AddText(
-                {x+(width-skipSize.x)*0.5f,y+height*0.90f},
-                IM_COL32(205,220,235,205),skipText);
-        }
-#endif
-
+        // STAGE PREVIEWはDraw3D()でBlender製の立体文字として描画する。
     } else if (gameFlowState_ == GameFlowState::Countdown) {
         // カメラがスタート地点へ戻ってから、落ち着いたテンポで開始を数える。
         const float beatDuration=kStartCountdownDuration/3.0f;
@@ -1461,13 +1749,8 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             circleCenter,ringRadius,
             IM_COL32(105,255,190,static_cast<int>((1.0f-beatProgress)*235.0f)),
             48,3.0f);
-        const char* readyText="GET READY";
-        const ImVec2 readySize=ImGui::CalcTextSize(readyText);
-        draw->AddText(
-            {x+(width-readySize.x)*0.5f,circleCenter.y+78.0f},
-            IM_COL32(170,245,205,255),readyText);
     } else if (startGoTimer_ > 0.0f) {
-        // 操作可能になった瞬間を、大きな文字と外へ抜けるリングで伝える。
+        // 操作可能になった瞬間を、外へ抜けるリングで伝える。
         const float progress=1.0f-std::clamp(startGoTimer_/kStartGoDuration,0.0f,1.0f);
         const float eased=progress*progress*(3.0f-2.0f*progress);
         const float alpha=1.0f-std::clamp((progress-0.58f)/0.42f,0.0f,1.0f);
@@ -1477,22 +1760,6 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
             center,ringRadius,
             IM_COL32(105,255,190,static_cast<int>(alpha*230.0f)),
             64,4.0f);
-        const float goFontSize=92.0f*(1.18f-0.18f*eased);
-        const char* goText="GO!";
-        const ImVec2 goSize=ImGui::GetFont()->CalcTextSizeA(goFontSize,FLT_MAX,0.0f,goText);
-        draw->AddText(
-            ImGui::GetFont(),goFontSize,
-            {center.x-goSize.x*0.5f,center.y-goSize.y*0.5f},
-            IM_COL32(220,255,235,static_cast<int>(alpha*255.0f)),goText);
-    } else if (gameFlowState_ != GameFlowState::Title &&
-               runtimeMessageTimer_ > 0.0f && !runtimeMessage_.empty()) {
-        const ImVec2 textSize = ImGui::CalcTextSize(runtimeMessage_.c_str());
-        const ImVec2 textPosition{x + (width - textSize.x) * 0.5f, y + height * 0.18f};
-        draw->AddRectFilled(
-            {textPosition.x - 18.0f, textPosition.y - 10.0f},
-            {textPosition.x + textSize.x + 18.0f, textPosition.y + textSize.y + 10.0f},
-            IM_COL32(8,12,20,220), 7.0f);
-        draw->AddText(textPosition, goalReached_ ? IM_COL32(90,255,120,255) : IM_COL32(255,235,90,255), runtimeMessage_.c_str());
     }
 
     // 操作開始前のカウントダウンからプレイ中まで、残機をブロック3個で表示する。
@@ -1599,19 +1866,13 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
                 {ringCenter.x - 2.0f, ringCenter.y - 2.0f},
                 4.5f, keyHighlight, 12, 2.0f);
 
-            char keyCountText[12]{};
-            std::snprintf(keyCountText, sizeof(keyCountText), "x %d", keyCount_);
-            draw->AddText(
-                {ringCenter.x + 19.0f, ringCenter.y + 13.0f},
-                hasKey ? IM_COL32(255, 229, 130, 255) : IM_COL32(105, 119, 139, 190),
-                keyCountText);
         }
 
-        // 左下へキーボードと同じ並びでWASDを常時表示する。
+        // 左下へ上段A/D・下段SPACEの並びで操作キーを常時表示する。
         // 操作開始から10秒後は邪魔にならない濃度へ落とし、いずれかのキー入力中は
         // UI全体を100%へ戻したうえで、押されているキーだけを強く発光させる。
         const bool movementInputActive =
-            movementKeyW_ || movementKeyA_ || movementKeyS_ || movementKeyD_;
+            movementKeyA_ || movementKeyD_ || movementKeySpace_;
         const float movementHudOpacity =
             (movementHudPlayingTime_ < 10.0f || movementInputActive) ? 1.0f : 0.56f;
         const auto hudAlpha = [movementHudOpacity](int alpha) {
@@ -1619,10 +1880,11 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
         };
         const ImVec2 movementOrigin{x + 18.0f, y + height - 124.0f};
 
-        const auto drawMovementKey = [&](const char* label, const ImVec2& center, bool pressed) {
-            constexpr float halfSize = 17.0f;
-            const ImVec2 minimum{center.x - halfSize, center.y - halfSize};
-            const ImVec2 maximum{center.x + halfSize, center.y + halfSize};
+        const auto drawMovementKey = [&](const char* label, const ImVec2& center,
+                                         float halfWidth, bool pressed) {
+            constexpr float halfHeight = 17.0f;
+            const ImVec2 minimum{center.x - halfWidth, center.y - halfHeight};
+            const ImVec2 maximum{center.x + halfWidth, center.y + halfHeight};
             if (pressed) {
                 draw->AddRect(
                     {minimum.x - 5.0f, minimum.y - 5.0f},
@@ -1647,13 +1909,13 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
                 label);
         };
 
-        const float keyLeft = movementOrigin.x + 28.0f;
-        const float keyTop = movementOrigin.y + 27.0f;
-        constexpr float keyStep = 40.0f;
-        drawMovementKey("W", {keyLeft + keyStep, keyTop}, movementKeyW_);
-        drawMovementKey("A", {keyLeft, keyTop + keyStep}, movementKeyA_);
-        drawMovementKey("S", {keyLeft + keyStep, keyTop + keyStep}, movementKeyS_);
-        drawMovementKey("D", {keyLeft + keyStep * 2.0f, keyTop + keyStep}, movementKeyD_);
+        const float centerX = movementOrigin.x + 68.0f;
+        const float topY = movementOrigin.y + 27.0f;
+        constexpr float horizontalOffset = 22.0f;
+        constexpr float rowStep = 40.0f;
+        drawMovementKey("A", {centerX - horizontalOffset, topY}, 17.0f, movementKeyA_);
+        drawMovementKey("D", {centerX + horizontalOffset, topY}, 17.0f, movementKeyD_);
+        drawMovementKey("SPACE", {centerX, topY + rowStep}, 39.0f, movementKeySpace_);
     }
 
     // 小型ブロックが画面奥から飛来して一枚の壁を組み上げ、完全に隠れた瞬間に
@@ -1764,11 +2026,6 @@ void StageEditor::DrawGameView(float x,float y,float width,float height) {
                 (loadingBlockCount - 1) * loadingBlockGap;
             const float loadingLeft = x + (width - loadingWidth) * 0.5f;
             const float loadingTop = y + height * 0.5f - loadingBlockSize * 0.5f;
-            const char* loadingText = "LOADING";
-            const ImVec2 loadingTextSize = ImGui::CalcTextSize(loadingText);
-            draw->AddText(
-                {x + (width - loadingTextSize.x) * 0.5f, loadingTop - 38.0f},
-                IM_COL32(205, 230, 244, 235), loadingText);
             const int illuminatedCount = (std::min)(
                 loadingBlockCount,
                 static_cast<int>(loadingProgress * static_cast<float>(loadingBlockCount + 1)));
@@ -2007,6 +2264,91 @@ void StageEditor::UpdateGameFlow(Input* input) {
     startGoTimer_=(std::max)(0.0f,startGoTimer_-deltaTime);
 
     const bool escapePressed = input->TriggerKey(DIK_ESCAPE);
+
+    if (gameFlowState_ == GameFlowState::GimmickGuide) {
+        const std::vector<int> visibleCategories = GetVisibleGimmickGuideCategories();
+        auto categoryIt = std::find(visibleCategories.begin(), visibleCategories.end(),
+            selectedGimmickGuideCategory_);
+        int categorySlot = categoryIt == visibleCategories.end() ? 0 :
+            static_cast<int>(std::distance(visibleCategories.begin(), categoryIt));
+        selectedGimmickGuideCategory_ = visibleCategories[categorySlot];
+        const bool previousCategory = input->TriggerKey(DIK_W) ||
+            input->TriggerKey(DIK_UP) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_UP);
+        const bool nextCategory = input->TriggerKey(DIK_S) ||
+            input->TriggerKey(DIK_DOWN) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_DOWN);
+        if (previousCategory) {
+            categorySlot = (categorySlot + static_cast<int>(visibleCategories.size()) - 1) %
+                static_cast<int>(visibleCategories.size());
+            selectedGimmickGuideCategory_ = visibleCategories[categorySlot];
+            selectedGimmickGuideEntry_ =
+                GetGimmickGuideEntriesForCategory(selectedGimmickGuideCategory_).front();
+            gimmickGuidePulseTimer_ = 0.0f;
+        }
+        if (nextCategory) {
+            categorySlot = (categorySlot + 1) % static_cast<int>(visibleCategories.size());
+            selectedGimmickGuideCategory_ = visibleCategories[categorySlot];
+            selectedGimmickGuideEntry_ =
+                GetGimmickGuideEntriesForCategory(selectedGimmickGuideCategory_).front();
+            gimmickGuidePulseTimer_ = 0.0f;
+        }
+
+        const std::vector<int> categoryEntries =
+            GetGimmickGuideEntriesForCategory(selectedGimmickGuideCategory_);
+        const int categoryItemCount = static_cast<int>(categoryEntries.size());
+        auto entryIt = std::find(categoryEntries.begin(), categoryEntries.end(),
+            selectedGimmickGuideEntry_);
+        int localEntry = entryIt == categoryEntries.end() ? 0 :
+            static_cast<int>(std::distance(categoryEntries.begin(), entryIt));
+        const bool previousEntry = input->TriggerKey(DIK_A) ||
+            input->TriggerKey(DIK_LEFT) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_LEFT);
+        const bool nextEntry = input->TriggerKey(DIK_D) ||
+            input->TriggerKey(DIK_RIGHT) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_DPAD_RIGHT);
+        if (previousEntry) {
+            localEntry = (localEntry + categoryItemCount - 1) % categoryItemCount;
+            selectedGimmickGuideEntry_ = categoryEntries[localEntry];
+            gimmickGuidePulseTimer_ = 0.0f;
+        }
+        if (nextEntry) {
+            localEntry = (localEntry + 1) % categoryItemCount;
+            selectedGimmickGuideEntry_ = categoryEntries[localEntry];
+            gimmickGuidePulseTimer_ = 0.0f;
+        }
+
+        const bool tabPressed = input->TriggerKey(DIK_TAB);
+        const bool acceptGuide = input->TriggerKey(DIK_RETURN) ||
+            input->TriggerKey(DIK_SPACE) ||
+            input->TriggerGamepadButton(XINPUT_GAMEPAD_A);
+        if (gimmickGuideFromPlaying_ && (tabPressed || escapePressed)) {
+            gameFlowState_ = GameFlowState::Playing;
+            gimmickGuideFromPlaying_ = false;
+            status_ = "Gimmick guide closed";
+        } else if (!gimmickGuideFromPlaying_ && escapePressed) {
+            gameFlowState_ = GameFlowState::StageSelect;
+            status_ = "Returned to stage select";
+        } else if (!gimmickGuideFromPlaying_ && acceptGuide) {
+            // ステージは既にロード済み。従来のブロック壁遷移へ接続する。
+            gameFlowState_ = GameFlowState::StageSelect;
+            startTransitionActive_ = true;
+            startTransitionContinue_ = false;
+            suppressStartJumpUntilReleased_ = true;
+            status_ = "Gimmick guide accepted";
+        }
+        return;
+    }
+
+    if (gameFlowState_ == GameFlowState::Playing && input->TriggerKey(DIK_TAB)) {
+        gimmickGuideFromPlaying_ = true;
+        selectedGimmickGuideCategory_ = 0;
+        selectedGimmickGuideEntry_ = 0;
+        gimmickGuidePulseTimer_ = 0.0f;
+        gameFlowState_ = GameFlowState::GimmickGuide;
+        status_ = "Gimmick guide opened";
+        return;
+    }
 #ifdef PLAYER_RELEASE
     if (escapePressed && gameFlowState_ == GameFlowState::Pause) {
         gameFlowState_ = pauseReturnState_;
@@ -2114,11 +2456,12 @@ void StageEditor::UpdateGameFlow(Input* input) {
         if (selectAccept) {
             const int stageIndex = std::clamp(selectedReleaseStage_, 0, 1);
             if (LoadStage(kReleaseStagePaths[stageIndex])) {
-                // ロード直後は選択画面のまま保持し、ブロック壁が完成した中央で
-                // IntroCameraへ切り替えることでステージ画像の先行表示を防ぐ。
-                gameFlowState_ = GameFlowState::StageSelect;
-                startTransitionActive_ = true;
-                startTransitionContinue_ = false;
+                // ロード後に登場ギミックを確認し、決定後に従来の遷移へ進む。
+                gameFlowState_ = GameFlowState::GimmickGuide;
+                gimmickGuideFromPlaying_ = false;
+                selectedGimmickGuideCategory_ = 0;
+                selectedGimmickGuideEntry_ = 0;
+                gimmickGuidePulseTimer_ = 0.0f;
                 suppressStartJumpUntilReleased_ = true;
                 status_ = std::string("Release stage selected: ") +
                     kReleaseStageLabels[stageIndex];
@@ -2233,14 +2576,12 @@ void StageEditor::UpdateGameFlow(Input* input) {
         }
 #endif
     } else if (gameFlowState_ == GameFlowState::Clear) {
-        // クリア結果を確認できる時間を確保した後、自動でタイトルへ戻す。
-        // リトライとタイトル復帰をキーで選ばせず、ゲームループを
-        // 「タイトル → プレイ → クリア → タイトル」に統一する。
-        clearReturnTimer_ = (std::max)(0.0f, clearReturnTimer_ - deltaTime);
-        if (clearReturnTimer_ <= 0.0f) {
+        const Camera* camera = object3dCommon_ ? object3dCommon_->GetDefaultCamera() : nullptr;
+        clearPresentation_.Update(deltaTime, camera, input->TriggerKey(DIK_RETURN));
+        if (clearPresentation_.IsExitComplete()) {
             ResetRuntimeState();
-            gameFlowState_ = GameFlowState::Title;
-            RefreshSaveDataAvailability();
+            gameFlowState_ = GameFlowState::StageSelect;
+            status_ = "Returned to stage select after clear";
         }
     }
 }
@@ -2256,7 +2597,7 @@ void StageEditor::ResetRuntimeState() {
     runtimeTime_ = 0.0f;
     runtimeMessageTimer_ = 0.0f;
     doorCooldown_ = 0.0f;
-    clearReturnTimer_ = 0.0f;
+    clearPresentation_.Reset();
     gameOverTimer_ = 0.0f;
     gameOverExitActive_ = false;
     gameOverExitTimer_ = 0.0f;
@@ -2274,10 +2615,13 @@ void StageEditor::ResetRuntimeState() {
     lifeChangedSlot_ = -1;
     lifeChangeTimer_ = 0.0f;
     movementHudPlayingTime_ = 0.0f;
-    movementKeyW_ = false;
     movementKeyA_ = false;
-    movementKeyS_ = false;
     movementKeyD_ = false;
+    movementKeySpace_ = false;
+    gimmickGuideFromPlaying_ = false;
+    selectedGimmickGuideCategory_ = 0;
+    selectedGimmickGuideEntry_ = 0;
+    gimmickGuidePulseTimer_ = 0.0f;
     respawnEffectActive_ = false;
     respawnEffectFromFall_ = false;
     respawnEffectTimer_ = 0.0f;
@@ -3117,9 +3461,9 @@ void StageEditor::UpdateGimmickCollisions(Input* input, float deltaTime) {
                 goalReached_ = true;
                 playerVelocity_ = {};
                 gameFlowState_ = GameFlowState::Clear;
-                // クリア表示を短時間見せた後、UpdateGameFlow()でタイトルへ自動復帰する。
-                clearReturnTimer_ = 2.5f;
-                ShowRuntimeMessage("GOAL CLEAR!", clearReturnTimer_);
+                clearPresentation_.Start();
+                runtimeMessage_.clear();
+                runtimeMessageTimer_ = 0.0f;
             }
             break;
         case 18: // Door
@@ -3478,6 +3822,46 @@ int StageEditor::FindNearestPlacement(float maxDistance) const {
 }
 
 const StageEditor::ItemDefinition* StageEditor::FindItem(int id) const {for(const auto& item:kItems)if(item.id==id)return &item;return nullptr;}
+
+std::vector<int> StageEditor::GetVisibleGimmickGuideEntries() const {
+    // 図鑑内の並び順。StageEditorの配置IDではなく、ガイド用配列のインデックスを返す。
+    constexpr int guideItemIds[] = {28, 29, 20, 9, 22, 23, 31, 17};
+    std::vector<int> entries;
+    for (int entry = 0; entry < static_cast<int>(std::size(guideItemIds)); ++entry) {
+        const int itemId = guideItemIds[entry];
+        const bool placed = std::any_of(placements_.begin(), placements_.end(),
+            [itemId](const Placement& placement) { return placement.itemId == itemId; });
+        if (placed) entries.push_back(entry);
+    }
+    // 編集途中など配置がまだない場合でも、画面を空にせず全項目を確認できるようにする。
+    if (entries.empty()) {
+        for (int entry = 0; entry < static_cast<int>(std::size(guideItemIds)); ++entry) {
+            entries.push_back(entry);
+        }
+    }
+    return entries;
+}
+
+std::vector<int> StageEditor::GetVisibleGimmickGuideCategories() const {
+    constexpr int entryCategories[] = {0, 1, 2, 3, 4, 4, 5, 5};
+    std::vector<int> categories;
+    for (const int entry : GetVisibleGimmickGuideEntries()) {
+        const int category = entryCategories[entry];
+        if (std::find(categories.begin(), categories.end(), category) == categories.end()) {
+            categories.push_back(category);
+        }
+    }
+    return categories;
+}
+
+std::vector<int> StageEditor::GetGimmickGuideEntriesForCategory(int category) const {
+    constexpr int entryCategories[] = {0, 1, 2, 3, 4, 4, 5, 5};
+    std::vector<int> entries;
+    for (const int entry : GetVisibleGimmickGuideEntries()) {
+        if (entryCategories[entry] == category) entries.push_back(entry);
+    }
+    return entries;
+}
 
 // 処理概要: 論理配置位置へモデル固有のローカルオフセットを合成する。
 // 注意事項: 配置のY回転に追従させ、モデル差し替え時の原点補正をJSONへ混在させない。
