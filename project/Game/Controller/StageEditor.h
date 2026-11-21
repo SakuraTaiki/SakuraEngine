@@ -13,6 +13,7 @@
 #include "MyMath.h"
 #include "Object3d.h"
 #include "ClearPresentationController.h"
+#include "EnemyBehavior.h"
 
 class Object3dCommon;
 class Model;
@@ -324,10 +325,8 @@ private:
     std::vector<uint8_t> runtimePlacementActive_;
     std::vector<uint8_t> runtimePlacementTouching_;
     std::vector<Vector3> runtimePlacementPositions_;
-    std::vector<float> runtimeEnemyDirections_;
-    // Walkerの見た目の向き。移動方向とは分離し、反転時に補間する。
-    std::vector<float> runtimeEnemyFacingAngles_;
-    std::vector<uint8_t> runtimeEnemyAlerted_;
+    // 各敵の状態と振る舞いは基底クラス経由で保持し、敵種別の分岐を外へ漏らさない。
+    std::vector<std::unique_ptr<EnemyBehavior>> runtimeEnemyBehaviors_;
     std::vector<uint8_t> runtimeFallingFloorStates_;
     std::vector<float> runtimeFallingFloorTimers_;
     std::vector<float> runtimeFallingFloorVelocities_;

@@ -2646,9 +2646,8 @@ void StageEditor::ResetRuntimeState() {
     runtimePlacementActive_.assign(placements_.size(), 1);
     runtimePlacementTouching_.assign(placements_.size(), 0);
     runtimePlacementPositions_.resize(placements_.size());
-    runtimeEnemyDirections_.assign(placements_.size(), 1.0f);
-    runtimeEnemyFacingAngles_.assign(placements_.size(), 0.0f);
-    runtimeEnemyAlerted_.assign(placements_.size(), 0);
+    runtimeEnemyBehaviors_.clear();
+    runtimeEnemyBehaviors_.resize(placements_.size());
     runtimeFallingFloorStates_.assign(placements_.size(), 0);
     runtimeFallingFloorTimers_.assign(placements_.size(), 0.0f);
     runtimeFallingFloorVelocities_.assign(placements_.size(), 0.0f);
@@ -2658,8 +2657,9 @@ void StageEditor::ResetRuntimeState() {
     playerRespawnPosition_ = GridToWorld(1, 2);
     for (size_t i = 0; i < placements_.size(); ++i) {
         runtimePlacementPositions_[i] = placements_[i].position;
-        runtimeEnemyDirections_[i] = (i % 2 == 0) ? 1.0f : -1.0f;
-        runtimeEnemyFacingAngles_[i] = runtimeEnemyDirections_[i] > 0.0f ? 0.0f : kPi;
+        const float initialDirection = (i % 2 == 0) ? 1.0f : -1.0f;
+        runtimeEnemyBehaviors_[i] = CreateEnemyBehavior(
+            placements_[i].itemId, initialDirection);
         if (placements_[i].itemId == 25) playerRespawnPosition_ = placements_[i].position;
         if (placements_[i].itemId == 5) runtimePlacementActive_[i] = 0;
         // 新規ゲームでは使用済み表示も初期色へ戻す。
@@ -3137,9 +3137,10 @@ void StageEditor::UpdateRuntimeObjects(float deltaTime) {
         runtimePlacementPositions_[i] = position;
         if (i < objects_.size() && objects_[i]) {
             ApplyPlacementVisualTransform(objects_[i].get(), placements_[i], position);
-            if ((itemId == 22 || itemId == 23) && i < runtimeEnemyFacingAngles_.size()) {
+            if (i < runtimeEnemyBehaviors_.size() && runtimeEnemyBehaviors_[i] &&
+                runtimeEnemyBehaviors_[i]->UsesFacingRotation()) {
                 Vector3 rotation = GetPlacementModelRotation(placements_[i]);
-                rotation.y += runtimeEnemyFacingAngles_[i];
+                rotation.y += runtimeEnemyBehaviors_[i]->GetFacingAngle();
                 objects_[i]->SetRotation(rotation);
             }
         }
@@ -3177,109 +3178,42 @@ bool StageEditor::IsPlacementBlocked(const Vector3& position, float halfX, float
 // 注意事項: 描画前に呼び出し、前フレームの状態との順序を保つ。
 void StageEditor::UpdateEnemies(float deltaTime) {
     if (goalReached_) return;
-    if (runtimeEnemyDirections_.size() != placements_.size()) {
-        runtimeEnemyDirections_.assign(placements_.size(), 1.0f);
-    }
-    if (runtimeEnemyFacingAngles_.size() != placements_.size()) {
-        runtimeEnemyFacingAngles_.resize(placements_.size(), 0.0f);
+    if (runtimeEnemyBehaviors_.size() != placements_.size()) {
+        runtimeEnemyBehaviors_.clear();
+        runtimeEnemyBehaviors_.resize(placements_.size());
         for (size_t i = 0; i < placements_.size(); ++i) {
-            runtimeEnemyFacingAngles_[i] = runtimeEnemyDirections_[i] > 0.0f ? 0.0f : kPi;
+            runtimeEnemyBehaviors_[i] = CreateEnemyBehavior(
+                placements_[i].itemId, (i % 2 == 0) ? 1.0f : -1.0f);
         }
-    }
-    if (runtimeEnemyAlerted_.size() != placements_.size()) {
-        runtimeEnemyAlerted_.assign(placements_.size(), 0);
     }
 
     for (size_t i = 0; i < placements_.size(); ++i) {
         const Placement& placement = placements_[i];
-        if (placement.itemId < 22 || placement.itemId > 24 || !IsRuntimePlacementActive(i)) continue;
+        if (i >= runtimeEnemyBehaviors_.size() || !runtimeEnemyBehaviors_[i] ||
+            !IsRuntimePlacementActive(i)) continue;
 
-        Vector3 position = runtimePlacementPositions_[i];
-        const Vector3 halfExtents = GetPlacementHalfExtents(placement);
-        const float halfX = halfExtents.x;
-        const float halfY = halfExtents.y;
+        EnemyUpdateContext context{};
+        context.deltaTime = deltaTime;
+        context.runtimeTime = runtimeTime_;
+        context.tileWorldSize = kTileWorldSize;
+        context.placementIndex = i;
+        context.spawnPosition = placement.position;
+        context.currentPosition = runtimePlacementPositions_[i];
+        context.halfExtents = GetPlacementHalfExtents(placement);
+        context.playerPosition = playerPosition_;
+        context.isBlocked = [this](const Vector3& position, float halfX, float halfY) {
+            return IsPlacementBlocked(position, halfX, halfY);
+        };
+        context.isSolidTile = [this](int gridX, int gridY) {
+            return IsCollisionSolid(gridX, gridY);
+        };
 
-        if (placement.itemId == 22) { // Walker: walls and ledges reverse its patrol direction.
-            constexpr float speed = 1.6f;
-            float direction = runtimeEnemyDirections_[i];
-            Vector3 candidate = position;
-            candidate.x += direction * speed * deltaTime;
-            const int aheadX = static_cast<int>(std::floor(
-                (candidate.x + direction * (halfX + 0.04f)) / kTileWorldSize));
-            // Enemies are visually smaller than one tile, but their placement is
-            // tile-centered. Probe from the bottom of that placement cell so a
-            // walker placed directly above a floor recognizes the floor below.
-            const int groundY = static_cast<int>(std::floor(
-                (candidate.y - (std::max)(halfY, kTileWorldSize * 0.5f) - 0.06f) / kTileWorldSize));
-            const bool wallAhead = IsPlacementBlocked(candidate, halfX, halfY);
-            const bool ledgeAhead = !IsCollisionSolid(aheadX, groundY);
-            if (wallAhead || ledgeAhead) {
-                runtimeEnemyDirections_[i] = -direction;
-            } else {
-                position = candidate;
-            }
-
-        } else if (placement.itemId == 23) { // Flyer: loops around its saved spawn point.
-            const float phase = static_cast<float>(i) * 0.73f;
-            Vector3 candidate = placement.position;
-            candidate.x += std::sin(runtimeTime_ * 1.25f + phase) * 2.0f;
-            candidate.y += std::sin(runtimeTime_ * 2.1f + phase) * 0.65f;
-            if (!IsPlacementBlocked(candidate, halfX, halfY)) {
-                const float horizontalVelocity = std::cos(runtimeTime_ * 1.25f + phase) * 2.5f;
-                if (std::abs(horizontalVelocity) > 0.025f) {
-                    runtimeEnemyDirections_[i] = horizontalVelocity > 0.0f ? 1.0f : -1.0f;
-                }
-                position = candidate;
-            }
-        } else { // Chaser: detects the player, pursues, then returns to its spawn point.
-            constexpr float detectDistance = 7.0f;
-            constexpr float loseDistance = 9.0f;
-            const float playerDx = playerPosition_.x - position.x;
-            const float playerDy = playerPosition_.y - position.y;
-            const float playerDistance = std::sqrt(playerDx * playerDx + playerDy * playerDy);
-            const bool wasAlerted = runtimeEnemyAlerted_[i] != 0;
-            if (!wasAlerted && playerDistance <= detectDistance) {
-                runtimeEnemyAlerted_[i] = 1;
-                ShowRuntimeMessage("CHASER ALERT!", 0.8f);
-            } else if (wasAlerted && playerDistance >= loseDistance) {
-                runtimeEnemyAlerted_[i] = 0;
-            }
-
-            const bool alerted = runtimeEnemyAlerted_[i] != 0;
-            const Vector3 target = alerted ? playerPosition_ : placement.position;
-            const float dx = target.x - position.x;
-            const float dy = target.y - position.y;
-            const float distance = std::sqrt(dx * dx + dy * dy);
-            if (distance > 0.02f) {
-                const float moveDistance = (alerted ? 2.6f : 1.4f) * deltaTime;
-                const float step = (std::min)(moveDistance, distance) / distance;
-                Vector3 candidate = position;
-                candidate.x += dx * step;
-                if (!IsPlacementBlocked(candidate, halfX, halfY)) position.x = candidate.x;
-                candidate = position;
-                candidate.y += dy * step;
-                if (!IsPlacementBlocked(candidate, halfX, halfY)) position.y = candidate.y;
-            }
-            if (i < objects_.size() && objects_[i]) {
-                objects_[i]->SetColor(alerted
-                    ? Vector4{1.0f,0.9f,0.1f,1.0f}
-                    : Vector4{0.95f,0.12f,0.12f,1.0f});
-            }
+        const EnemyUpdateResult result = runtimeEnemyBehaviors_[i]->Update(context);
+        runtimePlacementPositions_[i] = result.position;
+        if (result.alertStarted) ShowRuntimeMessage("CHASER ALERT!", 0.8f);
+        if (result.hasColorOverride && i < objects_.size() && objects_[i]) {
+            objects_[i]->SetColor(result.color);
         }
-
-        if (placement.itemId == 22 || placement.itemId == 23) {
-            // +X正面のモデルをY軸回転で反転する。負のスケールを使わないため、
-            // 振り向き途中に薄く消えたり法線が裏返ったりしない。
-            const float targetAngle = runtimeEnemyDirections_[i] > 0.0f ? 0.0f : kPi;
-            float angleDelta = targetAngle - runtimeEnemyFacingAngles_[i];
-            while (angleDelta > kPi) angleDelta -= kPi * 2.0f;
-            while (angleDelta < -kPi) angleDelta += kPi * 2.0f;
-            const float turnDuration = placement.itemId == 23 ? 0.24f : 0.20f;
-            const float turnBlend = (std::min)(1.0f, deltaTime / turnDuration);
-            runtimeEnemyFacingAngles_[i] += angleDelta * turnBlend;
-        }
-
-        runtimePlacementPositions_[i] = position;
     }
 }
 
